@@ -215,7 +215,7 @@ const FOOD_DEF = {
 
 const urlParams = new URLSearchParams(location.search);
 const requestedMap = urlParams.get('map');
-const MAP_TYPE = ['torus', 'sphere', 'genus2'].includes(requestedMap) ? requestedMap : 'torus';
+const MAP_TYPE = ['torus', 'sphere', 'genus2', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
 
 /* ===========================
    TORUS MESH
@@ -229,7 +229,7 @@ function ensureSurfaceGeometry() {
       map: gridTex,
       roughness: 0.55,
       metalness: 0.1,
-      side: MAP_TYPE === 'genus2' ? THREE.DoubleSide : THREE.FrontSide,
+      side: ['genus2', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
     });
   }
   if (torusMesh) {
@@ -242,6 +242,10 @@ function ensureSurfaceGeometry() {
     geo = new THREE.SphereGeometry(R, 64, 32);
   } else if (MAP_TYPE === 'genus2') {
     geo = createGenus2Geometry();
+  } else if (MAP_TYPE === 'mobius') {
+    geo = createMobiusGeometry();
+  } else if (MAP_TYPE === 'klein') {
+    geo = createKleinGeometry();
   } else {
     geo = new THREE.TorusGeometry(R, r, 64, 32);
   }
@@ -438,6 +442,76 @@ function createGenus2Geometry() {
   return geo;
 }
 
+function createParametricGridGeometry(uSegments, vSegments, pointFn) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  const row = vSegments + 1;
+
+  for (let i = 0; i <= uSegments; i++) {
+    const u = i / uSegments;
+    for (let j = 0; j <= vSegments; j++) {
+      const v = j / vSegments;
+      const p = pointFn(u, v);
+      positions.push(p.x, p.y, p.z);
+      uvs.push(u, v);
+    }
+  }
+
+  for (let i = 0; i < uSegments; i++) {
+    for (let j = 0; j < vSegments; j++) {
+      const a = i * row + j;
+      const b = (i + 1) * row + j;
+      const c = i * row + j + 1;
+      const d = (i + 1) * row + j + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function mobiusPointUV(u01, v01) {
+  const u = u01 * Math.PI * 2;
+  const width = 0.48 * fieldScale;
+  const R = 1.22 * fieldScale;
+  const t = (v01 - 0.5) * 2 * width;
+  const twist = u / 2;
+  const radial = R + t * Math.cos(twist);
+  return new THREE.Vector3(
+    radial * Math.cos(u),
+    t * Math.sin(twist),
+    radial * Math.sin(u),
+  );
+}
+
+function createMobiusGeometry() {
+  return createParametricGridGeometry(128, 20, mobiusPointUV);
+}
+
+function kleinPointUV(u01, v01) {
+  const u = u01 * Math.PI * 2;
+  const v = v01 * Math.PI * 2;
+  const s = 0.42 * fieldScale;
+  const tube = Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v);
+  const radius = 2.1 + tube;
+  return new THREE.Vector3(
+    s * radius * Math.cos(u),
+    s * (Math.sin(u / 2) * Math.sin(v) + Math.cos(u / 2) * Math.sin(2 * v)),
+    s * radius * Math.sin(u),
+  );
+}
+
+function createKleinGeometry() {
+  return createParametricGridGeometry(128, 32, kleinPointUV);
+}
+
 /* ===========================
    THREE.JS SETUP
    =========================== */
@@ -584,6 +658,14 @@ function to3D(gx, gy) {
     const p = genus2Point(gx, gy);
     return { x: p.x, y: p.y, z: p.z };
   }
+  if (MAP_TYPE === 'mobius') {
+    const p = mobiusPointUV(gx / GRID_SIZE, gy / (GRID_SIZE - 1));
+    return { x: p.x, y: p.y, z: p.z };
+  }
+  if (MAP_TYPE === 'klein') {
+    const p = kleinPointUV(gx / GRID_SIZE, gy / GRID_SIZE);
+    return { x: p.x, y: p.y, z: p.z };
+  }
   const R = getR();
   const r = getr();
   const theta = (gx / GRID_SIZE) * Math.PI * 2;
@@ -621,6 +703,15 @@ function surfaceNormal(gx, gy) {
       Math.sin(phi),
     ).normalize();
   }
+  if (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') {
+    const u = gx / GRID_SIZE;
+    const v = MAP_TYPE === 'mobius' ? gy / (GRID_SIZE - 1) : gy / GRID_SIZE;
+    const pointFn = MAP_TYPE === 'mobius' ? mobiusPointUV : kleinPointUV;
+    const du = pointFn(u + 1 / GRID_SIZE, v).sub(pointFn(u - 1 / GRID_SIZE, v));
+    const dvStep = 1 / (GRID_SIZE - 1);
+    const dv = pointFn(u, v + dvStep).sub(pointFn(u, v - dvStep));
+    return new THREE.Vector3().crossVectors(du, dv).normalize();
+  }
   const R = getR();
   const r = getr();
   const theta = (gx / GRID_SIZE) * Math.PI * 2;
@@ -657,6 +748,27 @@ function wrapGrid(v) {
 
 function normalizeGridPosition(gx, gy, dir = null) {
   const ndir = dir ? { ...dir } : null;
+
+  if (MAP_TYPE === 'mobius') {
+    while (gx < 0 || gx >= GRID_SIZE) {
+      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
+      gy = GRID_SIZE - 1 - gy;
+      if (ndir) ndir.dy *= -1;
+    }
+    if (gy < 0 || gy >= GRID_SIZE) {
+      return { gx, gy, dir: ndir, blocked: true };
+    }
+    return { gx, gy, dir: ndir };
+  }
+
+  if (MAP_TYPE === 'klein') {
+    while (gx < 0 || gx >= GRID_SIZE) {
+      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
+      gy = GRID_SIZE - 1 - gy;
+      if (ndir) ndir.dy *= -1;
+    }
+    return { gx, gy: wrapGrid(gy), dir: ndir };
+  }
 
   if (MAP_TYPE === 'sphere') {
     while (gy < SPHERE_MIN_GY || gy > SPHERE_MAX_GY) {
@@ -831,7 +943,7 @@ function loseLife() {
   }
 }
 
-function die() {
+function die(reason = '撞到自己！') {
   lives--;
   if (lives <= 0) {
     running = false;
@@ -839,7 +951,7 @@ function die() {
     addMsg('游戏结束！', 'dead');
   } else {
     resetSnakeOnDeath();
-    addMsg('撞到自己！剩余 ' + lives + ' 条命', 'warn');
+    addMsg(reason + '剩余 ' + lives + ' 条命', 'warn');
   }
 }
 
@@ -873,6 +985,10 @@ function gameTick() {
 
   const head = snake[0];
   const next = normalizeGridPosition(head.gx + direction.dx, head.gy + direction.dy, direction);
+  if (next.blocked) {
+    die('撞到边界！');
+    return;
+  }
   const newGx = next.gx;
   const newGy = next.gy;
   direction = next.dir;
@@ -1008,33 +1124,19 @@ function drawMiniMap() {
 
   // Map world coordinates to chart pixel center.
   function worldToChart(gx, gy) {
-    if (MAP_TYPE === 'sphere') {
-      let best = null;
-      for (let ry = -MAP_HALF; ry <= MAP_HALF; ry++) {
-        for (let rx = -MAP_HALF; rx <= MAP_HALF; rx++) {
-          const p = normalizeGridPosition(head.gx + rx, head.gy + ry);
-          if (p.gx !== gx || p.gy !== gy) continue;
-          const dist = Math.abs(rx) + Math.abs(ry);
-          if (!best || dist < best.dist) best = { rx, ry, dist };
-        }
+    let best = null;
+    for (let ry = -MAP_HALF; ry <= MAP_HALF; ry++) {
+      for (let rx = -MAP_HALF; rx <= MAP_HALF; rx++) {
+        const p = normalizeGridPosition(head.gx + rx, head.gy + ry);
+        if (p.blocked || p.gx !== gx || p.gy !== gy) continue;
+        const dist = Math.abs(rx) + Math.abs(ry);
+        if (!best || dist < best.dist) best = { rx, ry, dist };
       }
-      if (!best) return null;
-      return {
-        cx: (best.rx + MAP_HALF) * MAP_PX + MAP_PX / 2,
-        cy: (best.ry + MAP_HALF) * MAP_PX + MAP_PX / 2,
-      };
     }
-
-    let rx = gx - head.gx;
-    let ry = gy - head.gy;
-    if (rx > GRID_SIZE / 2) rx -= GRID_SIZE;
-    if (rx < -GRID_SIZE / 2) rx += GRID_SIZE;
-    if (ry > GRID_SIZE / 2) ry -= GRID_SIZE;
-    if (ry < -GRID_SIZE / 2) ry += GRID_SIZE;
-    if (Math.abs(rx) > MAP_HALF || Math.abs(ry) > MAP_HALF) return null;
+    if (!best) return null;
     return {
-      cx: (rx + MAP_HALF) * MAP_PX + MAP_PX / 2,
-      cy: (ry + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      cx: (best.rx + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      cy: (best.ry + MAP_HALF) * MAP_PX + MAP_PX / 2,
     };
   }
 
