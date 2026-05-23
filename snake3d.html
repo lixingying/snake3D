@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D 贪吃蛇</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    overflow: hidden;
+    background: #1a1a2e;
+    font-family: 'Courier New', monospace;
+    color: #eee;
+    user-select: none;
+  }
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 16px;
+  }
+  .top-bar {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+    background: rgba(26, 26, 46, 0.85);
+    padding: 8px 16px;
+    border-radius: 6px;
+    align-self: center;
+  }
+  .top-bar span { font-weight: bold; }
+  .life { color: #ff6b9d; }
+  .msg-area {
+    text-align: center;
+    font-size: 0.9rem;
+    height: 20px;
+    line-height: 20px;
+    pointer-events: none;
+  }
+  .msg-area.good { color: #4ecca3; }
+  .msg-area.warn { color: #f0a500; }
+  .msg-area.dead { color: #e84545; }
+  .bottom-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+  }
+  button {
+    padding: 6px 18px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #4ecca3;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  button:hover { background: #3db88f; }
+  button.btn2 { background: #5dade2; }
+  button.btn2:hover { background: #4a9ccf; }
+  .legend {
+    display: flex;
+    gap: 10px;
+    font-size: 0.72rem;
+    color: #aaa;
+    flex-wrap: wrap;
+    justify-content: center;
+    line-height: 1.5;
+    background: rgba(26, 26, 46, 0.75);
+    padding: 6px 12px;
+    border-radius: 4px;
+  }
+  .legend .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 2px;
+    vertical-align: middle;
+  }
+  .legend .sepa { color: #444; margin: 0 2px; font-weight: bold; }
+  .tip {
+    font-size: 0.75rem;
+    color: #666;
+    text-align: center;
+  }
+  .pause-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: #fff;
+    pointer-events: none;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="overlay">
+  <div class="top-bar">
+    <div>分数: <span id="score" style="color:#f0a500">0</span></div>
+    <div>最高分: <span id="best" style="color:#f0a500">0</span></div>
+    <div>生命: <span class="life" id="lives">❤ ❤ ❤</span></div>
+    <div>速度: <span id="speedLabel" style="color:#aaa">正常</span></div>
+  </div>
+  <div class="msg-area" id="msg"></div>
+  <div class="bottom-bar">
+    <div class="btn-row">
+      <button id="restart">重新开始</button>
+      <button class="btn2" id="resetCam">重置视角</button>
+    </div>
+    <div class="legend">
+      <span style="color:#5e5">增益:</span>
+      <span><span class="dot" style="background:#e84545"></span>变长</span>
+      <span><span class="dot" style="background:#5dade2"></span>扩大</span>
+      <span><span class="dot" style="background:#f4d03f"></span>减速</span>
+      <span><span class="dot" style="background:#ff6b9d"></span>+命</span>
+      <span class="sepa">|</span>
+      <span style="color:#e55">减益:</span>
+      <span><span class="dot" style="background:#8b0000"></span>缩短</span>
+      <span><span class="dot" style="background:#2c3e50"></span>缩小</span>
+      <span><span class="dot" style="background:#e67e22"></span>加速</span>
+      <span><span class="dot" style="background:#6c3483"></span>-命</span>
+    </div>
+    <div class="tip">方向键 / WASD · 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角</div>
+  </div>
+</div>
+
+<div class="pause-overlay" id="pauseOverlay" style="display:none;">暂停中</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ===========================
+   CONSTANTS
+   =========================== */
+const GRID_SIZE = 20;
+const SPAWN_INTERVAL = 35;
+const FOOD_LIFETIME = 160;
+const MAX_FOODS = 7;
+const MIN_CUBE_SIZE = 0.6;
+const MAX_CUBE_SIZE = 1.5;
+
+const FOOD_DEF = {
+  grow:       { color: 0xe84545, label: '变长', weight: 28, good: true },
+  expand:     { color: 0x5dade2, label: '扩大', weight: 7,  good: true },
+  slow:       { color: 0xf4d03f, label: '减速', weight: 7,  good: true },
+  extraLife:  { color: 0xff6b9d, label: '+命',  weight: 3,  good: true },
+  shrink:     { color: 0x8b0000, label: '缩短', weight: 28, good: false },
+  shrinkField:{ color: 0x2c3e50, label: '缩小', weight: 7,  good: false },
+  speedUp:    { color: 0xe67e22, label: '加速', weight: 7,  good: false },
+  loseLife:   { color: 0x6c3483, label: '-命',  weight: 3,  good: false },
+};
+
+const faceNormals = [
+  new THREE.Vector3( 0,  0,  1), // Front
+  new THREE.Vector3( 1,  0,  0), // Right
+  new THREE.Vector3( 0,  0, -1), // Back
+  new THREE.Vector3(-1,  0,  0), // Left
+  new THREE.Vector3( 0,  1,  0), // Top
+  new THREE.Vector3( 0, -1,  0), // Bottom
+];
+
+/* ===========================
+   THREE.JS SETUP
+   =========================== */
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 4, 12);
+
+const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
+camera.position.set(0, 0.8, 2.6);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+// Lights
+const ambient = new THREE.AmbientLight(0x334466, 1.8);
+scene.add(ambient);
+const key = new THREE.DirectionalLight(0xffffff, 2.5);
+key.position.set(5, 8, 5);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x4ecca3, 1.2);
+rim.position.set(-3, -1, -3);
+scene.add(rim);
+
+// Orbit controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 1.5;
+controls.maxDistance = 6;
+controls.update();
+
+let isUserOrbiting = false;
+renderer.domElement.addEventListener('pointerdown', () => { isUserOrbiting = true; });
+renderer.domElement.addEventListener('pointerup', () => { isUserOrbiting = false; });
+
+window.addEventListener('resize', () => {
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth, container.clientHeight);
+});
+
+/* ===========================
+   GRID TEXTURE
+   =========================== */
+function createGridTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#16213e';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = 'rgba(78,204,163,0.2)';
+  ctx.lineWidth = 1;
+  const step = size / GRID_SIZE;
+  for (let i = 0; i <= GRID_SIZE; i++) {
+    const pos = i * step;
+    ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/* ===========================
+   CUBE FACES
+   =========================== */
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+const gridTex = createGridTexture();
+const planeGeo = new THREE.PlaneGeometry(1, 1);
+const gridMat = new THREE.MeshStandardMaterial({
+  map: gridTex,
+  side: THREE.DoubleSide,
+  roughness: 0.55,
+  metalness: 0.1,
+});
+
+const faceConfigs = [
+  { pos: [0, 0,  0.5], rot: [0, 0, 0] },            // 0: Front
+  { pos: [0.5, 0, 0],  rot: [0, Math.PI / 2, 0] },   // 1: Right
+  { pos: [0, 0, -0.5], rot: [0, Math.PI, 0] },       // 2: Back
+  { pos: [-0.5, 0, 0], rot: [0, -Math.PI / 2, 0] },  // 3: Left
+  { pos: [0,  0.5, 0], rot: [-Math.PI / 2, 0, 0] },  // 4: Top
+  { pos: [0, -0.5, 0], rot: [Math.PI / 2, 0, 0] },   // 5: Bottom
+];
+
+const facePlanes = faceConfigs.map(cfg => {
+  const mesh = new THREE.Mesh(planeGeo, gridMat);
+  mesh.position.set(...cfg.pos);
+  mesh.rotation.set(...cfg.rot);
+  cubeGroup.add(mesh);
+  return mesh;
+});
+
+// Edge lines
+const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+const edgeLine = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0x4ecca3, transparent: true, opacity: 0.5 }));
+cubeGroup.add(edgeLine);
+
+/* ===========================
+   COORDINATE SYSTEM
+   =========================== */
+function halfSize() { return cubeSize / 2; }
+
+function to3D(face, u, v, h) {
+  // u, v in [0, 1]. h = cubeSize / 2.
+  const x = -h + 2 * h * u;
+  const y = h - 2 * h * v;
+  switch (face) {
+    case 0: return { x: x, y: y, z: h };                    // Front
+    case 1: return { x: h, y: y, z: h - 2 * h * u };       // Right
+    case 2: return { x: h - 2 * h * u, y: y, z: -h };      // Back
+    case 3: return { x: -h, y: y, z: -h + 2 * h * u };     // Left
+    case 4: return { x: x, y: h, z: -h + 2 * h * v };      // Top
+    case 5: return { x: x, y: -h, z: h - 2 * h * v };      // Bottom
+  }
+}
+
+function from3D(px, py, pz, h) {
+  const ax = Math.abs(px), ay = Math.abs(py), az = Math.abs(pz);
+  let face, u, v;
+  if (ax >= ay && ax >= az) {
+    face = px > 0 ? 1 : 3;
+    if (face === 1) { u = (h - pz) / (2 * h); v = (h - py) / (2 * h); }
+    else            { u = (pz + h) / (2 * h); v = (h - py) / (2 * h); }
+  } else if (ay >= ax && ay >= az) {
+    face = py > 0 ? 4 : 5;
+    u = (px + h) / (2 * h);
+    if (face === 4) { v = (pz + h) / (2 * h); }
+    else            { v = (h - pz) / (2 * h); }
+  } else {
+    face = pz > 0 ? 0 : 2;
+    if (face === 0) { u = (px + h) / (2 * h); v = (h - py) / (2 * h); }
+    else            { u = (h - px) / (2 * h); v = (h - py) / (2 * h); }
+  }
+  return { face, u: Math.max(0, Math.min(1, u)), v: Math.max(0, Math.min(1, v)) };
+}
+
+function gridToUV(gx, gy) {
+  return { u: (gx + 0.5) / GRID_SIZE, v: (gy + 0.5) / GRID_SIZE };
+}
+
+function uvToGrid(u, v) {
+  const gx = Math.round(u * GRID_SIZE - 0.5);
+  const gy = Math.round(v * GRID_SIZE - 0.5);
+  return {
+    gx: Math.max(0, Math.min(GRID_SIZE - 1, gx)),
+    gy: Math.max(0, Math.min(GRID_SIZE - 1, gy)),
+  };
+}
+
+function faceCenter(face, h) {
+  return to3D(face, 0.5, 0.5, h);
+}
+
+/* ===========================
+   SNAKE
+   =========================== */
+let snake = [];
+let prevSnake = [];
+let direction, nextDir;
+
+const segMeshes = [];
+const segGeo = new THREE.BoxGeometry(1, 1, 0.08);
+const headMat = new THREE.MeshStandardMaterial({ color: 0x4ecca3, roughness: 0.25, metalness: 0.1, transparent: true });
+const bodyMatTemplate = () => new THREE.MeshStandardMaterial({ color: 0x3db88f, roughness: 0.35, metalness: 0.05, transparent: true });
+
+function createSegMesh(isHead) {
+  const mat = isHead ? headMat : bodyMatTemplate();
+  const mesh = new THREE.Mesh(segGeo, mat);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+function ensureSegMeshes() {
+  while (segMeshes.length < snake.length) {
+    segMeshes.push(createSegMesh(segMeshes.length === 0));
+  }
+  while (segMeshes.length > snake.length) {
+    const m = segMeshes.pop();
+    // segGeo is shared — don't dispose
+    if (m.material !== headMat) m.material.dispose();
+    scene.remove(m);
+  }
+}
+
+function clearSegMeshes() {
+  while (segMeshes.length > 0) {
+    const m = segMeshes.pop();
+    if (m.material !== headMat) m.material.dispose();
+    scene.remove(m);
+  }
+}
+
+function clearFoodMeshes() {
+  while (foodMeshes.length > 0) {
+    const m = foodMeshes.pop();
+    m.material.dispose();
+    scene.remove(m);
+  }
+}
+
+function updateSnakeRender(t) {
+  const h = halfSize();
+  const cellSz = cubeSize / GRID_SIZE;
+  const segScale = cellSz * 0.78;
+  for (let i = 0; i < snake.length; i++) {
+    const cur = snake[i];
+    const prev = prevSnake[i] || cur;
+    let cu, cv, pu, pv, cf;
+    if (prev.face === cur.face) {
+      cu = gridToUV(cur.gx, cur.gy);
+      cv = cu;
+      pu = gridToUV(prev.gx, prev.gy);
+      pv = pu;
+      cf = cur.face;
+    } else {
+      // Interpolating across faces: just use current position
+      cu = gridToUV(cur.gx, cur.gy);
+      cv = cu;
+      pu = cu; pv = cv;
+      cf = cur.face;
+    }
+    const lerpU = pu.u + (cu.u - pu.u) * t;
+    const lerpV = pv.v + (cv.v - pv.v) * t;
+    const pos = to3D(cf, lerpU, lerpV, h);
+    const n = faceNormals[cf];
+    const mesh = segMeshes[i];
+    mesh.position.set(
+      pos.x + n.x * 0.012 * cubeSize,
+      pos.y + n.y * 0.012 * cubeSize,
+      pos.z + n.z * 0.012 * cubeSize
+    );
+    mesh.scale.setScalar(segScale);
+    const quat = new THREE.Quaternion();
+    quat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    mesh.quaternion.copy(quat);
+    // Color gradient
+    if (i > 0) {
+      const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
+      mesh.material.color.set(0x3db88f);
+      mesh.material.opacity = alpha;
+    }
+  }
+}
+
+function resetSnake() {
+  snake = [
+    { face: 0, gx: 10, gy: 10 },
+    { face: 0, gx: 9, gy: 10 },
+    { face: 0, gx: 8, gy: 10 },
+  ];
+  direction = { dx: 1, dy: 0 };
+  nextDir = { dx: 1, dy: 0 };
+  prevSnake = snake.map(s => ({ ...s }));
+}
+
+/* ===========================
+   FOOD
+   =========================== */
+let foods = [];
+const foodMeshes = [];
+const foodGeo = new THREE.SphereGeometry(1, 12, 8);
+
+function createFoodMesh() {
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.15 });
+  const mesh = new THREE.Mesh(foodGeo, mat);
+  scene.add(mesh);
+  return mesh;
+}
+
+function ensureFoodMeshes() {
+  while (foodMeshes.length < foods.length) foodMeshes.push(createFoodMesh());
+  while (foodMeshes.length > foods.length) {
+    const m = foodMeshes.pop();
+    // foodGeo is shared — don't dispose
+    m.material.dispose();
+    scene.remove(m);
+  }
+}
+
+function updateFoodRender(tickFraction) {
+  const h = halfSize();
+  const cellSz = cubeSize / GRID_SIZE;
+  const foodScale = cellSz * 0.32;
+  const time = performance.now() / 1000;
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    const uv = gridToUV(f.gx, f.gy);
+    const pos = to3D(f.face, uv.u, uv.v, h);
+    const n = faceNormals[f.face];
+    const mesh = foodMeshes[i];
+    mesh.position.set(
+      pos.x + n.x * 0.015 * cubeSize,
+      pos.y + n.y * 0.015 * cubeSize,
+      pos.z + n.z * 0.015 * cubeSize
+    );
+    mesh.scale.setScalar(foodScale);
+    const def = FOOD_DEF[f.type];
+    mesh.material.color.set(def.color);
+    const lifeLeft = 1 - f.age / FOOD_LIFETIME;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 4 + i * 2.5);
+    mesh.material.emissive = new THREE.Color(def.color);
+    mesh.material.emissiveIntensity = 0.2 + pulse * 0.5 * lifeLeft;
+    mesh.material.opacity = 0.6 + 0.4 * lifeLeft;
+    mesh.material.transparent = true;
+  }
+}
+
+/* ===========================
+   GAME STATE
+   =========================== */
+let cubeSize = 1.0;
+let score, lives, speed, best, running, paused;
+let spawnTimer;
+let msgs = [];
+let tickStartTime = 0;
+let tickInterval = 100;
+let loop = null;
+
+function speedLabel() {
+  if (speed <= 55) return '极快';
+  if (speed <= 75) return '快';
+  if (speed <= 115) return '正常';
+  if (speed <= 170) return '慢';
+  return '很慢';
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('best').textContent = best;
+  const hearts = [];
+  for (let i = 0; i < lives; i++) hearts.push('❤');
+  document.getElementById('lives').textContent = hearts.join(' ') || '💀';
+  document.getElementById('speedLabel').textContent = speedLabel();
+  document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
+}
+
+function setMsg(text, cls) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg-area' + (cls ? ' ' + cls : '');
+}
+
+function addMsg(text, cls) {
+  msgs.push({ text, cls, time: performance.now() });
+  if (msgs.length > 5) msgs.shift();
+  // Show latest non-expired message
+  const now = performance.now();
+  const recent = msgs.filter(m => now - m.time < 2000);
+  if (recent.length > 0) {
+    const m = recent[recent.length - 1];
+    setMsg(m.text, m.cls);
+  }
+}
+
+/* ===========================
+   GAME LOGIC
+   =========================== */
+function pickFoodType() {
+  const total = Object.values(FOOD_DEF).reduce((s, t) => s + t.weight, 0);
+  let r = Math.random() * total;
+  for (const [key, val] of Object.entries(FOOD_DEF)) {
+    r -= val.weight;
+    if (r <= 0) return key;
+  }
+  return 'grow';
+}
+
+function isOccupied(face, gx, gy) {
+  if (snake.some(s => s.face === face && s.gx === gx && s.gy === gy)) return true;
+  if (foods.some(f => f.face === face && f.gx === gx && f.gy === gy)) return true;
+  return false;
+}
+
+function trySpawnFood() {
+  if (foods.length >= MAX_FOODS) return;
+  const type = pickFoodType();
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const face = Math.floor(Math.random() * 6);
+    const gx = Math.floor(Math.random() * GRID_SIZE);
+    const gy = Math.floor(Math.random() * GRID_SIZE);
+    if (!isOccupied(face, gx, gy)) {
+      foods.push({ face, gx, gy, type, age: 0 });
+      return;
+    }
+  }
+}
+
+function applyEffect(type) {
+  switch (type) {
+    case 'grow':
+      score++;
+      if (score > best) {
+        best = score;
+        localStorage.setItem('snake3dBest', best);
+      }
+      addMsg('变长 +1', 'good');
+      break;
+    case 'expand':
+      if (cubeSize < MAX_CUBE_SIZE) {
+        cubeSize = Math.min(MAX_CUBE_SIZE, cubeSize + 0.08);
+        cubeGroup.scale.setScalar(cubeSize);
+        addMsg('场地扩大！', 'good');
+      } else { addMsg('场地已达最大', 'warn'); }
+      break;
+    case 'slow':
+      speed = Math.min(speed + 30, 250);
+      restartLoop();
+      addMsg('减速！', 'good');
+      break;
+    case 'extraLife':
+      lives++;
+      addMsg('+1 生命', 'good');
+      break;
+    case 'shrink':
+      if (snake.length > 2) { snake.pop(); snake.pop(); }
+      else if (snake.length > 1) { snake.pop(); }
+      ensureSegMeshes();
+      addMsg('身体缩短！', 'warn');
+      break;
+    case 'shrinkField':
+      if (cubeSize > MIN_CUBE_SIZE) {
+        cubeSize = Math.max(MIN_CUBE_SIZE, cubeSize - 0.08);
+        cubeGroup.scale.setScalar(cubeSize);
+        addMsg('场地缩小！', 'warn');
+      } else { addMsg('场地已到最小', 'warn'); }
+      break;
+    case 'speedUp':
+      speed = Math.max(speed - 30, 40);
+      restartLoop();
+      addMsg('加速！', 'warn');
+      break;
+    case 'loseLife':
+      loseLife();
+      break;
+  }
+}
+
+function loseLife() {
+  lives--;
+  if (lives <= 0) {
+    running = false;
+    setMsg('游戏结束！', 'dead');
+    addMsg('游戏结束！', 'dead');
+  } else {
+    addMsg('-1 生命！剩余 ' + lives + ' 条', 'warn');
+  }
+}
+
+function die() {
+  lives--;
+  if (lives <= 0) {
+    running = false;
+    setMsg('游戏结束！', 'dead');
+    addMsg('游戏结束！', 'dead');
+  } else {
+    resetSnakeOnDeath();
+    addMsg('撞到自己！剩余 ' + lives + ' 条命', 'warn');
+  }
+}
+
+function resetSnakeOnDeath() {
+  snake = [
+    { face: 0, gx: 10, gy: 10 },
+    { face: 0, gx: 9, gy: 10 },
+    { face: 0, gx: 8, gy: 10 },
+  ];
+  direction = { dx: 1, dy: 0 };
+  nextDir = { dx: 1, dy: 0 };
+  prevSnake = snake.map(s => ({ ...s }));
+  ensureSegMeshes();
+}
+
+function gameTick() {
+  if (!running || paused) return;
+
+  prevSnake = snake.map(s => ({ ...s }));
+  tickStartTime = performance.now();
+  tickInterval = speed;
+
+  // Age foods
+  foods = foods.filter(f => { f.age++; return f.age < FOOD_LIFETIME; });
+  ensureFoodMeshes();
+
+  // Spawn timer
+  spawnTimer--;
+  if (spawnTimer <= 0) {
+    spawnTimer = SPAWN_INTERVAL;
+    trySpawnFood();
+    ensureFoodMeshes();
+  }
+
+  direction = { ...nextDir };
+
+  const head = snake[0];
+  let newFace = head.face;
+  let newGx = head.gx + direction.dx;
+  let newGy = head.gy + direction.dy;
+
+  // Edge transition
+  if (newGx < 0 || newGx >= GRID_SIZE || newGy < 0 || newGy >= GRID_SIZE) {
+    const h = halfSize();
+    const tmpU = (newGx + 0.5) / GRID_SIZE;
+    const tmpV = (newGy + 0.5) / GRID_SIZE;
+    const p3 = to3D(head.face, tmpU, tmpV, h);
+    const res = from3D(p3.x, p3.y, p3.z, h);
+    newFace = res.face;
+    const grid = uvToGrid(res.u, res.v);
+    newGx = grid.gx;
+    newGy = grid.gy;
+
+    // Remap direction into the new face, perpendicular to the entry edge
+    if (newGx === 0)                direction = { dx: 1, dy: 0 };
+    else if (newGx === GRID_SIZE - 1) direction = { dx: -1, dy: 0 };
+    else if (newGy === 0)           direction = { dx: 0, dy: 1 };
+    else if (newGy === GRID_SIZE - 1) direction = { dx: 0, dy: -1 };
+    nextDir = { ...direction };
+  }
+
+  // Self collision
+  if (snake.some(s => s.face === newFace && s.gx === newGx && s.gy === newGy)) {
+    die();
+    return;
+  }
+
+  snake.unshift({ face: newFace, gx: newGx, gy: newGy });
+
+  // Food collision
+  const eatenIdx = foods.findIndex(f => f.face === newFace && f.gx === newGx && f.gy === newGy);
+  if (eatenIdx !== -1) {
+    const eaten = foods[eatenIdx];
+    foods.splice(eatenIdx, 1);
+    ensureFoodMeshes();
+    applyEffect(eaten.type);
+  } else {
+    snake.pop();
+  }
+
+  ensureSegMeshes();
+  updateUI();
+}
+
+function restartLoop() {
+  clearInterval(loop);
+  loop = setInterval(gameTick, speed);
+}
+
+/* ===========================
+   CAMERA FOLLOW
+   =========================== */
+let targetCamPos = new THREE.Vector3(0, 1.5, 2.8);
+const defaultDistance = 2.6;
+
+function updateCameraTarget() {
+  if (snake.length === 0) return;
+  const headFace = snake[0].face;
+  const h = halfSize();
+  const center = faceCenter(headFace, h);
+  const n = faceNormals[headFace];
+  // Small z-bias for top/bottom faces to avoid gimbal lock (camera looking straight down/up)
+  const zBias = (n.y !== 0) ? 0.6 : 0;
+  targetCamPos.set(
+    center.x + n.x * defaultDistance,
+    center.y + n.y * defaultDistance + 0.4,
+    center.z + n.z * defaultDistance + zBias
+  );
+}
+
+function resetCamera() {
+  updateCameraTarget();
+  camera.position.copy(targetCamPos);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+/* ===========================
+   INPUT
+   =========================== */
+document.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+
+  if (key === ' ' || key === 'spacebar') {
+    e.preventDefault();
+    if (running) paused = !paused;
+    updateUI();
+    return;
+  }
+
+  if (key === 'r') {
+    resetCamera();
+    return;
+  }
+
+  if (!running || paused) return;
+
+  const dir = direction;
+  switch (key) {
+    case 'arrowup':    case 'w': if (dir.dy !==  1) nextDir = { dx:  0, dy: -1 }; break;
+    case 'arrowdown':  case 's': if (dir.dy !== -1) nextDir = { dx:  0, dy:  1 }; break;
+    case 'arrowleft':  case 'a': if (dir.dx !==  1) nextDir = { dx: -1, dy:  0 }; break;
+    case 'arrowright': case 'd': if (dir.dx !== -1) nextDir = { dx:  1, dy:  0 }; break;
+  }
+});
+
+document.getElementById('restart').addEventListener('click', () => {
+  clearInterval(loop);
+  init();
+  loop = setInterval(gameTick, speed);
+});
+
+document.getElementById('resetCam').addEventListener('click', resetCamera);
+
+/* ===========================
+   INIT
+   =========================== */
+function init() {
+  clearSegMeshes();
+  clearFoodMeshes();
+
+  cubeSize = 1.0;
+  cubeGroup.scale.setScalar(cubeSize);
+  score = 0;
+  lives = 3;
+  speed = 100;
+  running = true;
+  paused = false;
+  foods = [];
+  spawnTimer = SPAWN_INTERVAL;
+  msgs = [];
+  best = parseInt(localStorage.getItem('snake3dBest') || '0');
+
+  resetSnake();
+  ensureSegMeshes();
+
+  // Seed initial foods
+  trySpawnFood();
+  trySpawnFood();
+  ensureFoodMeshes();
+
+  setMsg('');
+  updateUI();
+  resetCamera();
+  tickStartTime = performance.now();
+}
+
+/* ===========================
+   RENDER LOOP
+   =========================== */
+function render() {
+  requestAnimationFrame(render);
+
+  const elapsed = performance.now() - tickStartTime;
+  const t = Math.min(1, elapsed / Math.max(tickInterval, 1));
+
+  updateSnakeRender(t);
+  updateFoodRender(t);
+
+  // Camera follow
+  if (!isUserOrbiting && running) {
+    updateCameraTarget();
+    camera.position.lerp(targetCamPos, 0.05);
+    controls.target.set(0, 0, 0);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+init();
+loop = setInterval(gameTick, speed);
+render();
+</script>
+</body>
+</html>
