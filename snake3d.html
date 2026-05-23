@@ -965,7 +965,7 @@ function surfaceNormal(gx, gy, face = 'F') {
    SNAKE
    =========================== */
 let snake = [];
-let direction, nextDir;
+let direction, nextDir, chartDisplayDir;
 
 function wrapGrid(v) {
   return ((v % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
@@ -1056,6 +1056,7 @@ function resetSnake() {
   ];
   direction = { dx: 1, dy: 0 };
   nextDir = { dx: 1, dy: 0 };
+  chartDisplayDir = { dx: 1, dy: 0 };
 }
 
 /* ===========================
@@ -1240,6 +1241,7 @@ function resetSnakeOnDeath() {
   ];
   direction = { dx: 1, dy: 0 };
   nextDir = { dx: 1, dy: 0 };
+  chartDisplayDir = { dx: 1, dy: 0 };
 }
 
 function gameTick() {
@@ -1308,6 +1310,41 @@ function resetCamera() {
   controls.update();
 }
 
+function directionAngle(dir) {
+  if (dir.dx === 1) return 0;
+  if (dir.dy === 1) return 1;
+  if (dir.dx === -1) return 2;
+  return 3;
+}
+
+function rotateGridVector(vec, turns) {
+  const n = ((turns % 4) + 4) % 4;
+  if (n === 1) return { dx: -vec.dy, dy: vec.dx };
+  if (n === 2) return { dx: -vec.dx, dy: -vec.dy };
+  if (n === 3) return { dx: vec.dy, dy: -vec.dx };
+  return { dx: vec.dx, dy: vec.dy };
+}
+
+function surfaceToChartVector(vec) {
+  const baseDir = nextDir || direction;
+  const turns = directionAngle(chartDisplayDir) - directionAngle(baseDir);
+  return rotateGridVector(vec, turns);
+}
+
+function chartToSurfaceDirection(dir) {
+  const baseDir = nextDir || direction;
+  const turns = directionAngle(baseDir) - directionAngle(chartDisplayDir);
+  return rotateGridVector(dir, turns);
+}
+
+function queueChartDirection(displayDir) {
+  const surfaceDir = chartToSurfaceDirection(displayDir);
+  const activeDir = nextDir || direction;
+  if (surfaceDir.dx === -activeDir.dx && surfaceDir.dy === -activeDir.dy) return;
+  nextDir = surfaceDir;
+  chartDisplayDir = { ...displayDir };
+}
+
 /* ===========================
    INPUT
    =========================== */
@@ -1327,12 +1364,11 @@ document.addEventListener('keydown', e => {
 
   if (!running || paused) return;
 
-  const dir = direction;
   switch (key) {
-    case 'arrowup':    case 'w': if (dir.dy !==  1) nextDir = { dx:  0, dy: -1 }; break;
-    case 'arrowdown':  case 's': if (dir.dy !== -1) nextDir = { dx:  0, dy:  1 }; break;
-    case 'arrowleft':  case 'a': if (dir.dx !==  1) nextDir = { dx: -1, dy:  0 }; break;
-    case 'arrowright': case 'd': if (dir.dx !== -1) nextDir = { dx:  1, dy:  0 }; break;
+    case 'arrowup':    case 'w': queueChartDirection({ dx:  0, dy: -1 }); break;
+    case 'arrowdown':  case 's': queueChartDirection({ dx:  0, dy:  1 }); break;
+    case 'arrowleft':  case 'a': queueChartDirection({ dx: -1, dy:  0 }); break;
+    case 'arrowright': case 'd': queueChartDirection({ dx:  1, dy:  0 }); break;
   }
 });
 
@@ -1386,7 +1422,7 @@ function drawMiniMap() {
   if (snake.length === 0) return;
   const ctx = MAP_CTX;
   const head = snake[0];
-  const dir = direction;
+  const dir = chartDisplayDir;
 
   // Background
   ctx.fillStyle = '#16213e';
@@ -1419,9 +1455,10 @@ function drawMiniMap() {
       }
     }
     if (!best) return null;
+    const screenOffset = surfaceToChartVector({ dx: best.rx, dy: best.ry });
     return {
-      cx: (best.rx + MAP_HALF) * MAP_PX + MAP_PX / 2,
-      cy: (best.ry + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      cx: (screenOffset.dx + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      cy: (screenOffset.dy + MAP_HALF) * MAP_PX + MAP_PX / 2,
     };
   }
 
