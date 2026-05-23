@@ -965,7 +965,7 @@ function surfaceNormal(gx, gy, face = 'F') {
    SNAKE
    =========================== */
 let snake = [];
-let direction, nextDir, chartDisplayDir;
+let direction, nextDir, chartDisplayDir, chartMirror;
 
 function wrapGrid(v) {
   return ((v % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
@@ -1014,6 +1014,7 @@ function normalizeCubeSpherePosition(gx, gy, dir, side, faceKey) {
 function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
   const ndir = dir ? { ...dir } : null;
   let nside = side;
+  let mirror = 1;
 
   if (MAP_TYPE === 'sphere') {
     return normalizeCubeSpherePosition(gx, gy, ndir, nside, face || 'F');
@@ -1024,14 +1025,16 @@ function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
       gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
       gy = GRID_SIZE - 1 - gy;
       nside *= -1;
+      mirror *= -1;
       if (ndir) ndir.dy *= -1;
     }
     while (gy < 0 || gy >= GRID_SIZE) {
       gy = gy < 0 ? -gy - 1 : (GRID_SIZE - 1) - (gy - GRID_SIZE);
       nside *= -1;
+      mirror *= -1;
       if (ndir) ndir.dy *= -1;
     }
-    return { gx, gy, dir: ndir, side: nside };
+    return { gx, gy, dir: ndir, side: nside, mirror };
   }
 
   if (MAP_TYPE === 'klein') {
@@ -1039,12 +1042,13 @@ function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
       gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
       gy = wrapGrid(GRID_SIZE / 2 - 1 - gy);
       nside *= -1;
+      mirror *= -1;
       if (ndir) ndir.dy *= -1;
     }
-    return { gx, gy: wrapGrid(gy), dir: ndir, side: nside };
+    return { gx, gy: wrapGrid(gy), dir: ndir, side: nside, mirror };
   }
 
-  return { gx: wrapGrid(gx), gy: wrapGrid(gy), dir: ndir, side: nside };
+  return { gx: wrapGrid(gx), gy: wrapGrid(gy), dir: ndir, side: nside, mirror };
 }
 
 function resetSnake() {
@@ -1057,6 +1061,7 @@ function resetSnake() {
   direction = { dx: 1, dy: 0 };
   nextDir = { dx: 1, dy: 0 };
   chartDisplayDir = { dx: 1, dy: 0 };
+  chartMirror = 1;
 }
 
 /* ===========================
@@ -1242,6 +1247,7 @@ function resetSnakeOnDeath() {
   direction = { dx: 1, dy: 0 };
   nextDir = { dx: 1, dy: 0 };
   chartDisplayDir = { dx: 1, dy: 0 };
+  chartMirror = 1;
 }
 
 function gameTick() {
@@ -1274,6 +1280,7 @@ function gameTick() {
   const newFace = next.face ?? null;
   direction = next.dir;
   nextDir = { ...direction };
+  chartMirror *= next.mirror ?? 1;
 
   // Self collision
   if (snake.some(s => s.gx === newGx && s.gy === newGy && sameSurfaceSide(s.side, newSide) && sameSurfaceFace(s.face, newFace))) {
@@ -1325,16 +1332,23 @@ function rotateGridVector(vec, turns) {
   return { dx: vec.dx, dy: vec.dy };
 }
 
+function reflectAcrossDirectionAxis(vec, axisDir) {
+  if (axisDir.dx !== 0) return { dx: vec.dx, dy: -vec.dy };
+  return { dx: -vec.dx, dy: vec.dy };
+}
+
 function surfaceToChartVector(vec) {
   const baseDir = nextDir || direction;
+  const oriented = chartMirror === -1 ? reflectAcrossDirectionAxis(vec, baseDir) : vec;
   const turns = directionAngle(chartDisplayDir) - directionAngle(baseDir);
-  return rotateGridVector(vec, turns);
+  return rotateGridVector(oriented, turns);
 }
 
 function chartToSurfaceDirection(dir) {
   const baseDir = nextDir || direction;
   const turns = directionAngle(baseDir) - directionAngle(chartDisplayDir);
-  return rotateGridVector(dir, turns);
+  const rotated = rotateGridVector(dir, turns);
+  return chartMirror === -1 ? reflectAcrossDirectionAxis(rotated, baseDir) : rotated;
 }
 
 function queueChartDirection(displayDir) {
