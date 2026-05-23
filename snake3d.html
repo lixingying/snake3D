@@ -114,6 +114,25 @@
     color: #fff;
     pointer-events: none;
   }
+  #map-panel {
+    position: fixed;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    background: rgba(26, 26, 46, 0.93);
+    border: 2px solid #4ecca3;
+    border-radius: 8px;
+    padding: 5px;
+    pointer-events: none;
+  }
+  #map-panel .map-title {
+    text-align: center;
+    font-size: 0.68rem;
+    color: #4ecca3;
+    letter-spacing: 1px;
+    margin-top: 1px;
+  }
 </style>
 <script type="importmap">
 {
@@ -160,6 +179,11 @@
 
 <div class="pause-overlay" id="pauseOverlay" style="display:none;">暂停中</div>
 
+<div id="map-panel">
+  <canvas id="mapCanvas" width="252" height="252"></canvas>
+  <div class="map-title">局部地图</div>
+</div>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -171,8 +195,12 @@ const GRID_SIZE = 20;
 const SPAWN_INTERVAL = 35;
 const FOOD_LIFETIME = 160;
 const MAX_FOODS = 7;
-const MIN_CUBE_SIZE = 0.6;
-const MAX_CUBE_SIZE = 1.5;
+const BASE_R = 1.2;
+const BASE_R_TUBE = 0.5;
+const MIN_FIELD_SCALE = 0.6;
+const MAX_FIELD_SCALE = 1.5;
+const SPHERE_MIN_GY = 1;
+const SPHERE_MAX_GY = GRID_SIZE - 2;
 
 const FOOD_DEF = {
   grow:       { color: 0xe84545, label: '变长', weight: 28, good: true },
@@ -185,14 +213,230 @@ const FOOD_DEF = {
   loseLife:   { color: 0x6c3483, label: '-命',  weight: 3,  good: false },
 };
 
-const faceNormals = [
-  new THREE.Vector3( 0,  0,  1), // Front
-  new THREE.Vector3( 1,  0,  0), // Right
-  new THREE.Vector3( 0,  0, -1), // Back
-  new THREE.Vector3(-1,  0,  0), // Left
-  new THREE.Vector3( 0,  1,  0), // Top
-  new THREE.Vector3( 0, -1,  0), // Bottom
-];
+const urlParams = new URLSearchParams(location.search);
+const requestedMap = urlParams.get('map');
+const MAP_TYPE = ['torus', 'sphere', 'genus2'].includes(requestedMap) ? requestedMap : 'torus';
+
+/* ===========================
+   TORUS MESH
+   =========================== */
+let torusMesh = null;
+let torusMaterial = null;
+
+function ensureSurfaceGeometry() {
+  if (!torusMaterial) {
+    torusMaterial = new THREE.MeshStandardMaterial({
+      map: gridTex,
+      roughness: 0.55,
+      metalness: 0.1,
+      side: MAP_TYPE === 'genus2' ? THREE.DoubleSide : THREE.FrontSide,
+    });
+  }
+  if (torusMesh) {
+    torusMesh.geometry.dispose();
+    scene.remove(torusMesh);
+  }
+  const R = getR(), r = getr();
+  let geo;
+  if (MAP_TYPE === 'sphere') {
+    geo = new THREE.SphereGeometry(R, 64, 32);
+  } else if (MAP_TYPE === 'genus2') {
+    geo = createGenus2Geometry();
+  } else {
+    geo = new THREE.TorusGeometry(R, r, 64, 32);
+  }
+  torusMesh = new THREE.Mesh(geo, torusMaterial);
+  torusMesh.position.set(0, 0, 0);
+  scene.add(torusMesh);
+}
+
+function getR() { return BASE_R * fieldScale; }
+function getr() { return BASE_R_TUBE * fieldScale; }
+
+const GENUS2_CENTER_OFFSET = 0.58;
+const GENUS2_RING_R = 0.58;
+const GENUS2_TUBE_R = 0.27;
+const GENUS2_SMOOTH = 0.18;
+const GENUS2_RESOLUTION = 44;
+
+function wrap01(t) {
+  return ((t % 1) + 1) % 1;
+}
+
+function smoothMin(a, b, k) {
+  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k));
+  return b * (1 - h) + a * h - k * h * (1 - h);
+}
+
+function genus2TorusDistance(p, cx) {
+  const R = GENUS2_RING_R * fieldScale;
+  const r = GENUS2_TUBE_R * fieldScale;
+  const radial = Math.hypot(p.x - cx, p.y) - R;
+  return Math.hypot(radial, p.z) - r;
+}
+
+function genus2Field(x, y, z) {
+  const offset = GENUS2_CENTER_OFFSET * fieldScale;
+  const p = { x, y, z };
+  const left = genus2TorusDistance(p, -offset);
+  const right = genus2TorusDistance(p, offset);
+  return smoothMin(left, right, GENUS2_SMOOTH * fieldScale);
+}
+
+function estimateGenus2Normal(x, y, z) {
+  const e = 0.008 * fieldScale;
+  return new THREE.Vector3(
+    genus2Field(x + e, y, z) - genus2Field(x - e, y, z),
+    genus2Field(x, y + e, z) - genus2Field(x, y - e, z),
+    genus2Field(x, y, z + e) - genus2Field(x, y, z - e),
+  ).normalize();
+}
+
+function genus2UV(p) {
+  const offset = GENUS2_CENTER_OFFSET * fieldScale;
+  const R = GENUS2_RING_R * fieldScale;
+  const rightSide = p.x >= 0;
+  const cx = rightSide ? offset : -offset;
+  const dx = p.x - cx;
+  const theta = Math.atan2(p.y, dx);
+  const localU = rightSide ? wrap01((theta - Math.PI) / (Math.PI * 2)) : wrap01(theta / (Math.PI * 2));
+  const phi = Math.atan2(p.z, Math.hypot(dx, p.y) - R);
+  return {
+    u: rightSide ? 0.5 + localU * 0.5 : localU * 0.5,
+    v: wrap01(phi / (Math.PI * 2)),
+  };
+}
+
+function genus2Point(gx, gy) {
+  const halfGrid = GRID_SIZE / 2;
+  const rightSide = gx >= halfGrid;
+  const localX = rightSide ? gx - halfGrid : gx;
+  const localU = localX / halfGrid;
+  const theta = (rightSide ? Math.PI : 0) + localU * Math.PI * 2;
+  const phi = (gy / GRID_SIZE) * Math.PI * 2;
+  const offset = GENUS2_CENTER_OFFSET * fieldScale;
+  const R = GENUS2_RING_R * fieldScale;
+  const r = GENUS2_TUBE_R * fieldScale;
+  const cx = rightSide ? offset : -offset;
+  const ring = R + r * Math.cos(phi);
+  return new THREE.Vector3(
+    cx + ring * Math.cos(theta),
+    ring * Math.sin(theta),
+    r * Math.sin(phi),
+  );
+}
+
+function createGenus2Geometry() {
+  const scale = fieldScale;
+  const bounds = {
+    minX: -1.52 * scale, maxX: 1.52 * scale,
+    minY: -0.92 * scale, maxY: 0.92 * scale,
+    minZ: -0.46 * scale, maxZ: 0.46 * scale,
+  };
+  const n = GENUS2_RESOLUTION;
+  const nx = n + 1, ny = n + 1, nz = n + 1;
+  const dx = (bounds.maxX - bounds.minX) / n;
+  const dy = (bounds.maxY - bounds.minY) / n;
+  const dz = (bounds.maxZ - bounds.minZ) / n;
+  const values = new Float32Array(nx * ny * nz);
+
+  const idx = (i, j, k) => i + nx * (j + ny * k);
+  const point = (i, j, k) => new THREE.Vector3(
+    bounds.minX + i * dx,
+    bounds.minY + j * dy,
+    bounds.minZ + k * dz,
+  );
+
+  for (let k = 0; k < nz; k++) {
+    const z = bounds.minZ + k * dz;
+    for (let j = 0; j < ny; j++) {
+      const y = bounds.minY + j * dy;
+      for (let i = 0; i < nx; i++) {
+        const x = bounds.minX + i * dx;
+        values[idx(i, j, k)] = genus2Field(x, y, z);
+      }
+    }
+  }
+
+  const positions = [];
+  const uvs = [];
+  const cubeCorners = [
+    [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
+    [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
+  ];
+  const tetrahedra = [
+    [0, 5, 1, 6],
+    [0, 1, 2, 6],
+    [0, 2, 3, 6],
+    [0, 3, 7, 6],
+    [0, 7, 4, 6],
+    [0, 4, 5, 6],
+  ];
+  const tetEdges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+
+  function addVertex(p) {
+    const uv = genus2UV(p);
+    positions.push(p.x, p.y, p.z);
+    uvs.push(uv.u, uv.v);
+  }
+
+  function addTriangle(a, b, c) {
+    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3);
+    const outward = estimateGenus2Normal(center.x, center.y, center.z);
+    const winding = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
+    if (winding.dot(outward) < 0) {
+      addVertex(a); addVertex(c); addVertex(b);
+    } else {
+      addVertex(a); addVertex(b); addVertex(c);
+    }
+  }
+
+  function polygonToTriangles(points) {
+    if (points.length < 3) return;
+    const center = points.reduce((acc, p) => acc.add(p), new THREE.Vector3()).multiplyScalar(1 / points.length);
+    const normal = estimateGenus2Normal(center.x, center.y, center.z);
+    let axis = new THREE.Vector3().subVectors(points[0], center).normalize();
+    if (axis.lengthSq() < 1e-8) axis = new THREE.Vector3(1, 0, 0);
+    const axis2 = new THREE.Vector3().crossVectors(normal, axis).normalize();
+    const sorted = points.slice().sort((a, b) => {
+      const da = new THREE.Vector3().subVectors(a, center);
+      const db = new THREE.Vector3().subVectors(b, center);
+      return Math.atan2(da.dot(axis2), da.dot(axis)) - Math.atan2(db.dot(axis2), db.dot(axis));
+    });
+    for (let i = 1; i < sorted.length - 1; i++) {
+      addTriangle(sorted[0], sorted[i], sorted[i + 1]);
+    }
+  }
+
+  function polygoniseTet(tet, corners, cornerValues) {
+    const pts = [];
+    for (const [ia, ib] of tetEdges) {
+      const ca = tet[ia], cb = tet[ib];
+      const va = cornerValues[ca], vb = cornerValues[cb];
+      if ((va <= 0 && vb <= 0) || (va > 0 && vb > 0)) continue;
+      const t = va / (va - vb);
+      pts.push(new THREE.Vector3().lerpVectors(corners[ca], corners[cb], t));
+    }
+    polygonToTriangles(pts);
+  }
+
+  for (let k = 0; k < n; k++) {
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const corners = cubeCorners.map(([ox, oy, oz]) => point(i + ox, j + oy, k + oz));
+        const cornerValues = cubeCorners.map(([ox, oy, oz]) => values[idx(i + ox, j + oy, k + oz)]);
+        for (const tet of tetrahedra) polygoniseTet(tet, corners, cornerValues);
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
 
 /* ===========================
    THREE.JS SETUP
@@ -203,7 +447,7 @@ scene.background = new THREE.Color(0x1a1a2e);
 scene.fog = new THREE.Fog(0x1a1a2e, 4, 12);
 
 const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
-camera.position.set(0, 0.8, 2.6);
+camera.position.set(3.5, 2.8, 5.5);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -227,13 +471,10 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 1.5;
-controls.maxDistance = 6;
+controls.minDistance = 2.5;
+controls.maxDistance = 8;
 controls.update();
 
-let isUserOrbiting = false;
-renderer.domElement.addEventListener('pointerdown', () => { isUserOrbiting = true; });
-renderer.domElement.addEventListener('pointerup', () => { isUserOrbiting = false; });
 
 window.addEventListener('resize', () => {
   camera.aspect = container.clientWidth / container.clientHeight;
@@ -242,281 +483,217 @@ window.addEventListener('resize', () => {
 });
 
 /* ===========================
-   GRID TEXTURE
+   DYNAMIC SURFACE TEXTURE
    =========================== */
-function createGridTexture() {
-  const size = 512;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
+const TEX_SIZE = 512;
+const texCanvas = document.createElement('canvas');
+const texCtx = texCanvas.getContext('2d');
+texCanvas.width = TEX_SIZE;
+texCanvas.height = TEX_SIZE;
+const cellPx = TEX_SIZE / GRID_SIZE;
+
+const gridTex = new THREE.CanvasTexture(texCanvas);
+gridTex.wrapS = gridTex.wrapT = THREE.ClampToEdgeWrapping;
+gridTex.colorSpace = THREE.SRGBColorSpace;
+
+function redrawTexture() {
+  const ctx = texCtx;
+  const size = TEX_SIZE;
+
+  // Background
   ctx.fillStyle = '#16213e';
   ctx.fillRect(0, 0, size, size);
+
+  // Grid lines
   ctx.strokeStyle = 'rgba(78,204,163,0.2)';
   ctx.lineWidth = 1;
-  const step = size / GRID_SIZE;
   for (let i = 0; i <= GRID_SIZE; i++) {
-    const pos = i * step;
+    const pos = i * cellPx;
     ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+
+  // Draw food (below snake so snake is on top)
+  for (const f of foods) {
+    const cx = (f.gx + 0.5) * cellPx;
+    const cy = (f.gy + 0.5) * cellPx;
+    const def = FOOD_DEF[f.type];
+    const lifeLeft = 1 - f.age / FOOD_LIFETIME;
+    // Pulsing glow
+    const time = performance.now() / 1000;
+    const pulse = 0.6 + 0.4 * Math.sin(time * 4 + f.gx * 2.5 + f.gy * 3.1);
+    ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
+    ctx.globalAlpha = (0.5 + 0.5 * lifeLeft) * pulse;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cellPx * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+    // Bright center dot
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cellPx * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    // Label
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.max(8, Math.floor(cellPx * 0.38))}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.label, cx, cy);
+  }
+  ctx.globalAlpha = 1;
+
+  // Draw snake
+  for (let i = snake.length - 1; i >= 0; i--) {
+    const s = snake[i];
+    const sx = s.gx * cellPx;
+    const sy = s.gy * cellPx;
+    const pad = 1;
+    if (i === 0) {
+      // Head — bright yellow
+      ctx.fillStyle = '#ffdd57';
+      ctx.fillRect(sx + pad, sy + pad, cellPx - pad * 2, cellPx - pad * 2);
+      // Eyes
+      const dir = direction;
+      const cx = sx + cellPx / 2;
+      const cy = sy + cellPx / 2;
+      const er = cellPx * 0.10;
+      ctx.fillStyle = '#1a1a2e';
+      let ex1, ey1, ex2, ey2;
+      if (dir.dx === 1)      { ex1 = cx + cellPx*0.18; ey1 = cy - cellPx*0.18; ex2 = cx + cellPx*0.18; ey2 = cy + cellPx*0.18; }
+      else if (dir.dx === -1) { ex1 = cx - cellPx*0.18; ey1 = cy - cellPx*0.18; ex2 = cx - cellPx*0.18; ey2 = cy + cellPx*0.18; }
+      else if (dir.dy === -1) { ex1 = cx - cellPx*0.18; ey1 = cy - cellPx*0.18; ex2 = cx + cellPx*0.18; ey2 = cy - cellPx*0.18; }
+      else                   { ex1 = cx - cellPx*0.18; ey1 = cy + cellPx*0.18; ex2 = cx + cellPx*0.18; ey2 = cy + cellPx*0.18; }
+      ctx.beginPath(); ctx.arc(ex1, ey1, er, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex2, ey2, er, 0, Math.PI*2); ctx.fill();
+    } else {
+      // Body — orange gradient
+      const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
+      ctx.fillStyle = `rgba(255,140,66,${alpha.toFixed(2)})`;
+      ctx.fillRect(sx + pad, sy + pad, cellPx - pad * 2, cellPx - pad * 2);
+    }
+  }
+
+  gridTex.needsUpdate = true;
 }
-
-/* ===========================
-   CUBE FACES
-   =========================== */
-const cubeGroup = new THREE.Group();
-scene.add(cubeGroup);
-const gridTex = createGridTexture();
-const planeGeo = new THREE.PlaneGeometry(1, 1);
-const gridMat = new THREE.MeshStandardMaterial({
-  map: gridTex,
-  side: THREE.DoubleSide,
-  roughness: 0.55,
-  metalness: 0.1,
-});
-
-const faceConfigs = [
-  { pos: [0, 0,  0.5], rot: [0, 0, 0] },            // 0: Front
-  { pos: [0.5, 0, 0],  rot: [0, Math.PI / 2, 0] },   // 1: Right
-  { pos: [0, 0, -0.5], rot: [0, Math.PI, 0] },       // 2: Back
-  { pos: [-0.5, 0, 0], rot: [0, -Math.PI / 2, 0] },  // 3: Left
-  { pos: [0,  0.5, 0], rot: [-Math.PI / 2, 0, 0] },  // 4: Top
-  { pos: [0, -0.5, 0], rot: [Math.PI / 2, 0, 0] },   // 5: Bottom
-];
-
-const facePlanes = faceConfigs.map(cfg => {
-  const mesh = new THREE.Mesh(planeGeo, gridMat);
-  mesh.position.set(...cfg.pos);
-  mesh.rotation.set(...cfg.rot);
-  cubeGroup.add(mesh);
-  return mesh;
-});
-
-// Edge lines
-const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-const edgeLine = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0x4ecca3, transparent: true, opacity: 0.5 }));
-cubeGroup.add(edgeLine);
 
 /* ===========================
    COORDINATE SYSTEM
    =========================== */
-function halfSize() { return cubeSize / 2; }
-
-function to3D(face, u, v, h) {
-  // u, v in [0, 1]. h = cubeSize / 2.
-  const x = -h + 2 * h * u;
-  const y = h - 2 * h * v;
-  switch (face) {
-    case 0: return { x: x, y: y, z: h };                    // Front
-    case 1: return { x: h, y: y, z: h - 2 * h * u };       // Right
-    case 2: return { x: h - 2 * h * u, y: y, z: -h };      // Back
-    case 3: return { x: -h, y: y, z: -h + 2 * h * u };     // Left
-    case 4: return { x: x, y: h, z: -h + 2 * h * v };      // Top
-    case 5: return { x: x, y: -h, z: h - 2 * h * v };      // Bottom
+function to3D(gx, gy) {
+  if (MAP_TYPE === 'genus2') {
+    const p = genus2Point(gx, gy);
+    return { x: p.x, y: p.y, z: p.z };
   }
-}
-
-function from3D(px, py, pz, h) {
-  const ax = Math.abs(px), ay = Math.abs(py), az = Math.abs(pz);
-  let face, u, v;
-  if (ax >= ay && ax >= az) {
-    face = px > 0 ? 1 : 3;
-    if (face === 1) { u = (h - pz) / (2 * h); v = (h - py) / (2 * h); }
-    else            { u = (pz + h) / (2 * h); v = (h - py) / (2 * h); }
-  } else if (ay >= ax && ay >= az) {
-    face = py > 0 ? 4 : 5;
-    u = (px + h) / (2 * h);
-    if (face === 4) { v = (pz + h) / (2 * h); }
-    else            { v = (h - pz) / (2 * h); }
-  } else {
-    face = pz > 0 ? 0 : 2;
-    if (face === 0) { u = (px + h) / (2 * h); v = (h - py) / (2 * h); }
-    else            { u = (h - px) / (2 * h); v = (h - py) / (2 * h); }
+  const R = getR();
+  const r = getr();
+  const theta = (gx / GRID_SIZE) * Math.PI * 2;
+  const cosTheta = Math.cos(theta);
+  const sinTheta = Math.sin(theta);
+  if (MAP_TYPE === 'sphere') {
+    const phi = (gy / GRID_SIZE) * Math.PI;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    return {
+      x: R * sp * cosTheta,
+      y: R * cp,
+      z: R * sp * sinTheta,
+    };
   }
-  return { face, u: Math.max(0, Math.min(1, u)), v: Math.max(0, Math.min(1, v)) };
-}
-
-function gridToUV(gx, gy) {
-  return { u: (gx + 0.5) / GRID_SIZE, v: (gy + 0.5) / GRID_SIZE };
-}
-
-function uvToGrid(u, v) {
-  const gx = Math.round(u * GRID_SIZE - 0.5);
-  const gy = Math.round(v * GRID_SIZE - 0.5);
+  const phi = (gy / GRID_SIZE) * Math.PI * 2;
+  const cosPhi = Math.cos(phi);
+  const sinPhi = Math.sin(phi);
   return {
-    gx: Math.max(0, Math.min(GRID_SIZE - 1, gx)),
-    gy: Math.max(0, Math.min(GRID_SIZE - 1, gy)),
+    x: (R + r * cosPhi) * cosTheta,
+    y: r * sinPhi,
+    z: (R + r * cosPhi) * sinTheta,
   };
 }
 
-function faceCenter(face, h) {
-  return to3D(face, 0.5, 0.5, h);
+function surfaceNormal(gx, gy) {
+  if (MAP_TYPE === 'genus2') {
+    const halfGrid = GRID_SIZE / 2;
+    const rightSide = gx >= halfGrid;
+    const localX = rightSide ? gx - halfGrid : gx;
+    const theta = (rightSide ? Math.PI : 0) + (localX / halfGrid) * Math.PI * 2;
+    const phi = (gy / GRID_SIZE) * Math.PI * 2;
+    return new THREE.Vector3(
+      Math.cos(theta) * Math.cos(phi),
+      Math.sin(theta) * Math.cos(phi),
+      Math.sin(phi),
+    ).normalize();
+  }
+  const R = getR();
+  const r = getr();
+  const theta = (gx / GRID_SIZE) * Math.PI * 2;
+  const cosTheta = Math.cos(theta);
+  const sinTheta = Math.sin(theta);
+  if (MAP_TYPE === 'sphere') {
+    const phi = (gy / GRID_SIZE) * Math.PI;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    return new THREE.Vector3(
+      sp * cosTheta,
+      cp,
+      sp * sinTheta,
+    );
+  }
+  const phi = (gy / GRID_SIZE) * Math.PI * 2;
+  const cosPhi = Math.cos(phi);
+  const sinPhi = Math.sin(phi);
+  return new THREE.Vector3(
+    cosPhi * cosTheta,
+    sinPhi,
+    cosPhi * sinTheta,
+  );
 }
 
 /* ===========================
    SNAKE
    =========================== */
 let snake = [];
-let prevSnake = [];
 let direction, nextDir;
 
-const segMeshes = [];
-const segGeo = new THREE.BoxGeometry(1, 1, 0.08);
-const headMat = new THREE.MeshStandardMaterial({ color: 0x4ecca3, roughness: 0.25, metalness: 0.1, transparent: true });
-const bodyMatTemplate = () => new THREE.MeshStandardMaterial({ color: 0x3db88f, roughness: 0.35, metalness: 0.05, transparent: true });
-
-function createSegMesh(isHead) {
-  const mat = isHead ? headMat : bodyMatTemplate();
-  const mesh = new THREE.Mesh(segGeo, mat);
-  mesh.castShadow = true;
-  scene.add(mesh);
-  return mesh;
+function wrapGrid(v) {
+  return ((v % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
 }
 
-function ensureSegMeshes() {
-  while (segMeshes.length < snake.length) {
-    segMeshes.push(createSegMesh(segMeshes.length === 0));
-  }
-  while (segMeshes.length > snake.length) {
-    const m = segMeshes.pop();
-    // segGeo is shared — don't dispose
-    if (m.material !== headMat) m.material.dispose();
-    scene.remove(m);
-  }
-}
+function normalizeGridPosition(gx, gy, dir = null) {
+  const ndir = dir ? { ...dir } : null;
 
-function clearSegMeshes() {
-  while (segMeshes.length > 0) {
-    const m = segMeshes.pop();
-    if (m.material !== headMat) m.material.dispose();
-    scene.remove(m);
-  }
-}
-
-function clearFoodMeshes() {
-  while (foodMeshes.length > 0) {
-    const m = foodMeshes.pop();
-    m.material.dispose();
-    scene.remove(m);
-  }
-}
-
-function updateSnakeRender(t) {
-  const h = halfSize();
-  const cellSz = cubeSize / GRID_SIZE;
-  const segScale = cellSz * 0.78;
-  for (let i = 0; i < snake.length; i++) {
-    const cur = snake[i];
-    const prev = prevSnake[i] || cur;
-    let cu, cv, pu, pv, cf;
-    if (prev.face === cur.face) {
-      cu = gridToUV(cur.gx, cur.gy);
-      cv = cu;
-      pu = gridToUV(prev.gx, prev.gy);
-      pv = pu;
-      cf = cur.face;
-    } else {
-      // Interpolating across faces: just use current position
-      cu = gridToUV(cur.gx, cur.gy);
-      cv = cu;
-      pu = cu; pv = cv;
-      cf = cur.face;
+  if (MAP_TYPE === 'sphere') {
+    while (gy < SPHERE_MIN_GY || gy > SPHERE_MAX_GY) {
+      if (gy < SPHERE_MIN_GY) {
+        gy = SPHERE_MIN_GY + (SPHERE_MIN_GY - gy - 1);
+        gx += GRID_SIZE / 2;
+      } else {
+        gy = SPHERE_MAX_GY - (gy - SPHERE_MAX_GY - 1);
+        gx += GRID_SIZE / 2;
+      }
+      if (ndir) ndir.dy *= -1;
     }
-    const lerpU = pu.u + (cu.u - pu.u) * t;
-    const lerpV = pv.v + (cv.v - pv.v) * t;
-    const pos = to3D(cf, lerpU, lerpV, h);
-    const n = faceNormals[cf];
-    const mesh = segMeshes[i];
-    mesh.position.set(
-      pos.x + n.x * 0.012 * cubeSize,
-      pos.y + n.y * 0.012 * cubeSize,
-      pos.z + n.z * 0.012 * cubeSize
-    );
-    mesh.scale.setScalar(segScale);
-    const quat = new THREE.Quaternion();
-    quat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
-    mesh.quaternion.copy(quat);
-    // Color gradient
-    if (i > 0) {
-      const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
-      mesh.material.color.set(0x3db88f);
-      mesh.material.opacity = alpha;
-    }
+    return { gx: wrapGrid(gx), gy, dir: ndir };
   }
+
+  return { gx: wrapGrid(gx), gy: wrapGrid(gy), dir: ndir };
 }
 
 function resetSnake() {
   snake = [
-    { face: 0, gx: 10, gy: 10 },
-    { face: 0, gx: 9, gy: 10 },
-    { face: 0, gx: 8, gy: 10 },
+    { gx: 10, gy: 10 },
+    { gx: 9, gy: 10 },
+    { gx: 8, gy: 10 },
   ];
   direction = { dx: 1, dy: 0 };
   nextDir = { dx: 1, dy: 0 };
-  prevSnake = snake.map(s => ({ ...s }));
 }
 
 /* ===========================
    FOOD
    =========================== */
 let foods = [];
-const foodMeshes = [];
-const foodGeo = new THREE.SphereGeometry(1, 12, 8);
-
-function createFoodMesh() {
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.15 });
-  const mesh = new THREE.Mesh(foodGeo, mat);
-  scene.add(mesh);
-  return mesh;
-}
-
-function ensureFoodMeshes() {
-  while (foodMeshes.length < foods.length) foodMeshes.push(createFoodMesh());
-  while (foodMeshes.length > foods.length) {
-    const m = foodMeshes.pop();
-    // foodGeo is shared — don't dispose
-    m.material.dispose();
-    scene.remove(m);
-  }
-}
-
-function updateFoodRender(tickFraction) {
-  const h = halfSize();
-  const cellSz = cubeSize / GRID_SIZE;
-  const foodScale = cellSz * 0.32;
-  const time = performance.now() / 1000;
-  for (let i = 0; i < foods.length; i++) {
-    const f = foods[i];
-    const uv = gridToUV(f.gx, f.gy);
-    const pos = to3D(f.face, uv.u, uv.v, h);
-    const n = faceNormals[f.face];
-    const mesh = foodMeshes[i];
-    mesh.position.set(
-      pos.x + n.x * 0.015 * cubeSize,
-      pos.y + n.y * 0.015 * cubeSize,
-      pos.z + n.z * 0.015 * cubeSize
-    );
-    mesh.scale.setScalar(foodScale);
-    const def = FOOD_DEF[f.type];
-    mesh.material.color.set(def.color);
-    const lifeLeft = 1 - f.age / FOOD_LIFETIME;
-    const pulse = 0.5 + 0.5 * Math.sin(time * 4 + i * 2.5);
-    mesh.material.emissive = new THREE.Color(def.color);
-    mesh.material.emissiveIntensity = 0.2 + pulse * 0.5 * lifeLeft;
-    mesh.material.opacity = 0.6 + 0.4 * lifeLeft;
-    mesh.material.transparent = true;
-  }
-}
 
 /* ===========================
    GAME STATE
    =========================== */
-let cubeSize = 1.0;
+let fieldScale = 1.0;
 let score, lives, speed, best, running, paused;
 let spawnTimer;
 let msgs = [];
@@ -573,9 +750,9 @@ function pickFoodType() {
   return 'grow';
 }
 
-function isOccupied(face, gx, gy) {
-  if (snake.some(s => s.face === face && s.gx === gx && s.gy === gy)) return true;
-  if (foods.some(f => f.face === face && f.gx === gx && f.gy === gy)) return true;
+function isOccupied(gx, gy) {
+  if (snake.some(s => s.gx === gx && s.gy === gy)) return true;
+  if (foods.some(f => f.gx === gx && f.gy === gy)) return true;
   return false;
 }
 
@@ -583,11 +760,12 @@ function trySpawnFood() {
   if (foods.length >= MAX_FOODS) return;
   const type = pickFoodType();
   for (let attempt = 0; attempt < 80; attempt++) {
-    const face = Math.floor(Math.random() * 6);
     const gx = Math.floor(Math.random() * GRID_SIZE);
-    const gy = Math.floor(Math.random() * GRID_SIZE);
-    if (!isOccupied(face, gx, gy)) {
-      foods.push({ face, gx, gy, type, age: 0 });
+    const gy = MAP_TYPE === 'sphere'
+      ? SPHERE_MIN_GY + Math.floor(Math.random() * (SPHERE_MAX_GY - SPHERE_MIN_GY + 1))
+      : Math.floor(Math.random() * GRID_SIZE);
+    if (!isOccupied(gx, gy)) {
+      foods.push({ gx, gy, type, age: 0 });
       return;
     }
   }
@@ -599,14 +777,14 @@ function applyEffect(type) {
       score++;
       if (score > best) {
         best = score;
-        localStorage.setItem('snake3dBest', best);
+        localStorage.setItem(`snake3dBest_${MAP_TYPE}`, best);
       }
       addMsg('变长 +1', 'good');
       break;
     case 'expand':
-      if (cubeSize < MAX_CUBE_SIZE) {
-        cubeSize = Math.min(MAX_CUBE_SIZE, cubeSize + 0.08);
-        cubeGroup.scale.setScalar(cubeSize);
+      if (fieldScale < MAX_FIELD_SCALE) {
+        fieldScale = Math.min(MAX_FIELD_SCALE, fieldScale + 0.08);
+        ensureSurfaceGeometry();
         addMsg('场地扩大！', 'good');
       } else { addMsg('场地已达最大', 'warn'); }
       break;
@@ -622,13 +800,12 @@ function applyEffect(type) {
     case 'shrink':
       if (snake.length > 2) { snake.pop(); snake.pop(); }
       else if (snake.length > 1) { snake.pop(); }
-      ensureSegMeshes();
       addMsg('身体缩短！', 'warn');
       break;
     case 'shrinkField':
-      if (cubeSize > MIN_CUBE_SIZE) {
-        cubeSize = Math.max(MIN_CUBE_SIZE, cubeSize - 0.08);
-        cubeGroup.scale.setScalar(cubeSize);
+      if (fieldScale > MIN_FIELD_SCALE) {
+        fieldScale = Math.max(MIN_FIELD_SCALE, fieldScale - 0.08);
+        ensureSurfaceGeometry();
         addMsg('场地缩小！', 'warn');
       } else { addMsg('场地已到最小', 'warn'); }
       break;
@@ -668,82 +845,57 @@ function die() {
 
 function resetSnakeOnDeath() {
   snake = [
-    { face: 0, gx: 10, gy: 10 },
-    { face: 0, gx: 9, gy: 10 },
-    { face: 0, gx: 8, gy: 10 },
+    { gx: 10, gy: 10 },
+    { gx: 9, gy: 10 },
+    { gx: 8, gy: 10 },
   ];
   direction = { dx: 1, dy: 0 };
   nextDir = { dx: 1, dy: 0 };
-  prevSnake = snake.map(s => ({ ...s }));
-  ensureSegMeshes();
 }
 
 function gameTick() {
   if (!running || paused) return;
 
-  prevSnake = snake.map(s => ({ ...s }));
   tickStartTime = performance.now();
   tickInterval = speed;
 
   // Age foods
   foods = foods.filter(f => { f.age++; return f.age < FOOD_LIFETIME; });
-  ensureFoodMeshes();
 
   // Spawn timer
   spawnTimer--;
   if (spawnTimer <= 0) {
     spawnTimer = SPAWN_INTERVAL;
     trySpawnFood();
-    ensureFoodMeshes();
   }
 
   direction = { ...nextDir };
 
   const head = snake[0];
-  let newFace = head.face;
-  let newGx = head.gx + direction.dx;
-  let newGy = head.gy + direction.dy;
-
-  // Edge transition
-  if (newGx < 0 || newGx >= GRID_SIZE || newGy < 0 || newGy >= GRID_SIZE) {
-    const h = halfSize();
-    const tmpU = (newGx + 0.5) / GRID_SIZE;
-    const tmpV = (newGy + 0.5) / GRID_SIZE;
-    const p3 = to3D(head.face, tmpU, tmpV, h);
-    const res = from3D(p3.x, p3.y, p3.z, h);
-    newFace = res.face;
-    const grid = uvToGrid(res.u, res.v);
-    newGx = grid.gx;
-    newGy = grid.gy;
-
-    // Remap direction into the new face, perpendicular to the entry edge
-    if (newGx === 0)                direction = { dx: 1, dy: 0 };
-    else if (newGx === GRID_SIZE - 1) direction = { dx: -1, dy: 0 };
-    else if (newGy === 0)           direction = { dx: 0, dy: 1 };
-    else if (newGy === GRID_SIZE - 1) direction = { dx: 0, dy: -1 };
-    nextDir = { ...direction };
-  }
+  const next = normalizeGridPosition(head.gx + direction.dx, head.gy + direction.dy, direction);
+  const newGx = next.gx;
+  const newGy = next.gy;
+  direction = next.dir;
+  nextDir = { ...direction };
 
   // Self collision
-  if (snake.some(s => s.face === newFace && s.gx === newGx && s.gy === newGy)) {
+  if (snake.some(s => s.gx === newGx && s.gy === newGy)) {
     die();
     return;
   }
 
-  snake.unshift({ face: newFace, gx: newGx, gy: newGy });
+  snake.unshift({ gx: newGx, gy: newGy });
 
   // Food collision
-  const eatenIdx = foods.findIndex(f => f.face === newFace && f.gx === newGx && f.gy === newGy);
+  const eatenIdx = foods.findIndex(f => f.gx === newGx && f.gy === newGy);
   if (eatenIdx !== -1) {
     const eaten = foods[eatenIdx];
     foods.splice(eatenIdx, 1);
-    ensureFoodMeshes();
     applyEffect(eaten.type);
   } else {
     snake.pop();
   }
 
-  ensureSegMeshes();
   updateUI();
 }
 
@@ -753,29 +905,10 @@ function restartLoop() {
 }
 
 /* ===========================
-   CAMERA FOLLOW
+   CAMERA
    =========================== */
-let targetCamPos = new THREE.Vector3(0, 1.5, 2.8);
-const defaultDistance = 2.6;
-
-function updateCameraTarget() {
-  if (snake.length === 0) return;
-  const headFace = snake[0].face;
-  const h = halfSize();
-  const center = faceCenter(headFace, h);
-  const n = faceNormals[headFace];
-  // Small z-bias for top/bottom faces to avoid gimbal lock (camera looking straight down/up)
-  const zBias = (n.y !== 0) ? 0.6 : 0;
-  targetCamPos.set(
-    center.x + n.x * defaultDistance,
-    center.y + n.y * defaultDistance + 0.4,
-    center.z + n.z * defaultDistance + zBias
-  );
-}
-
 function resetCamera() {
-  updateCameraTarget();
-  camera.position.copy(targetCamPos);
+  camera.position.set(3.5, 2.8, 5.5);
   controls.target.set(0, 0, 0);
   controls.update();
 }
@@ -821,11 +954,8 @@ document.getElementById('resetCam').addEventListener('click', resetCamera);
    INIT
    =========================== */
 function init() {
-  clearSegMeshes();
-  clearFoodMeshes();
-
-  cubeSize = 1.0;
-  cubeGroup.scale.setScalar(cubeSize);
+  fieldScale = 1.0;
+  ensureSurfaceGeometry();
   score = 0;
   lives = 3;
   speed = 100;
@@ -834,15 +964,13 @@ function init() {
   foods = [];
   spawnTimer = SPAWN_INTERVAL;
   msgs = [];
-  best = parseInt(localStorage.getItem('snake3dBest') || '0');
+  best = parseInt(localStorage.getItem(`snake3dBest_${MAP_TYPE}`) || '0');
 
   resetSnake();
-  ensureSegMeshes();
 
   // Seed initial foods
   trySpawnFood();
   trySpawnFood();
-  ensureFoodMeshes();
 
   setMsg('');
   updateUI();
@@ -851,23 +979,137 @@ function init() {
 }
 
 /* ===========================
+   LOCAL MAP (2D CHART)
+   =========================== */
+const mapCanvas = document.getElementById('mapCanvas');
+const MAP_CTX = mapCanvas.getContext('2d');
+const MAP_CELLS = 9;
+const MAP_PX = mapCanvas.width / MAP_CELLS;
+const MAP_HALF = Math.floor(MAP_CELLS / 2);
+
+function drawMiniMap() {
+  if (snake.length === 0) return;
+  const ctx = MAP_CTX;
+  const head = snake[0];
+  const dir = direction;
+
+  // Background
+  ctx.fillStyle = '#16213e';
+  ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(78,204,163,0.25)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= MAP_CELLS; i++) {
+    const p = i * MAP_PX;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, mapCanvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(mapCanvas.width, p); ctx.stroke();
+  }
+
+  // Map world coordinates to chart pixel center.
+  function worldToChart(gx, gy) {
+    if (MAP_TYPE === 'sphere') {
+      let best = null;
+      for (let ry = -MAP_HALF; ry <= MAP_HALF; ry++) {
+        for (let rx = -MAP_HALF; rx <= MAP_HALF; rx++) {
+          const p = normalizeGridPosition(head.gx + rx, head.gy + ry);
+          if (p.gx !== gx || p.gy !== gy) continue;
+          const dist = Math.abs(rx) + Math.abs(ry);
+          if (!best || dist < best.dist) best = { rx, ry, dist };
+        }
+      }
+      if (!best) return null;
+      return {
+        cx: (best.rx + MAP_HALF) * MAP_PX + MAP_PX / 2,
+        cy: (best.ry + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      };
+    }
+
+    let rx = gx - head.gx;
+    let ry = gy - head.gy;
+    if (rx > GRID_SIZE / 2) rx -= GRID_SIZE;
+    if (rx < -GRID_SIZE / 2) rx += GRID_SIZE;
+    if (ry > GRID_SIZE / 2) ry -= GRID_SIZE;
+    if (ry < -GRID_SIZE / 2) ry += GRID_SIZE;
+    if (Math.abs(rx) > MAP_HALF || Math.abs(ry) > MAP_HALF) return null;
+    return {
+      cx: (rx + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      cy: (ry + MAP_HALF) * MAP_PX + MAP_PX / 2,
+    };
+  }
+
+  // Food
+  for (const f of foods) {
+    const m = worldToChart(f.gx, f.gy);
+    if (!m) continue;
+    const def = FOOD_DEF[f.type];
+    const r = MAP_PX * 0.35;
+    ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
+    ctx.beginPath(); ctx.arc(m.cx, m.cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.max(7, Math.floor(MAP_PX*0.30))}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.label, m.cx, m.cy);
+  }
+
+  // Snake (tail first, head on top)
+  for (let i = snake.length - 1; i >= 0; i--) {
+    const s = snake[i];
+    const m = worldToChart(s.gx, s.gy);
+    if (!m) continue;
+    const pad = 1;
+    const x = m.cx - MAP_PX / 2;
+    const y = m.cy - MAP_PX / 2;
+    if (i === 0) {
+      ctx.fillStyle = '#ffdd57';
+      ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+      // Eyes
+      const er = MAP_PX * 0.10;
+      ctx.fillStyle = '#1a1a2e';
+      let ex1, ey1, ex2, ey2;
+      if (dir.dx === 1)       { ex1 = m.cx + MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
+      else if (dir.dx === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx - MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
+      else if (dir.dy === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy - MAP_PX*0.18; }
+      else                    { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy + MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
+      ctx.beginPath(); ctx.arc(ex1, ey1, er, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex2, ey2, er, 0, Math.PI * 2); ctx.fill();
+    } else {
+      const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
+      ctx.fillStyle = `rgba(255,140,66,${alpha.toFixed(2)})`;
+      ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+    }
+  }
+
+  // Center cell highlight
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 2;
+  const chx = MAP_HALF * MAP_PX, chy = MAP_HALF * MAP_PX;
+  ctx.strokeRect(chx + 0.5, chy + 0.5, MAP_PX - 1, MAP_PX - 1);
+
+  // Direction arrow on head
+  const acx = MAP_HALF * MAP_PX + MAP_PX / 2;
+  const acy = MAP_HALF * MAP_PX + MAP_PX / 2;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  const alen = MAP_PX * 0.3;
+  const ax = acx + dir.dx * alen;
+  const ay = acy + dir.dy * alen;
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(ax - dir.dy * alen * 0.35, ay + dir.dx * alen * 0.35);
+  ctx.lineTo(ax + dir.dy * alen * 0.35, ay - dir.dx * alen * 0.35);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* ===========================
    RENDER LOOP
    =========================== */
 function render() {
   requestAnimationFrame(render);
 
-  const elapsed = performance.now() - tickStartTime;
-  const t = Math.min(1, elapsed / Math.max(tickInterval, 1));
-
-  updateSnakeRender(t);
-  updateFoodRender(t);
-
-  // Camera follow
-  if (!isUserOrbiting && running) {
-    updateCameraTarget();
-    camera.position.lerp(targetCamPos, 0.05);
-    controls.target.set(0, 0, 0);
-  }
+  redrawTexture();
+  drawMiniMap();
   controls.update();
   renderer.render(scene, camera);
 }

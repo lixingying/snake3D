@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D 贪吃蛇 — 选择地图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #111118;
+    font-family: 'Courier New', monospace;
+    color: #eee;
+  }
+  .container { text-align: center; }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 6px;
+    color: #4ecca3;
+    letter-spacing: 4px;
+  }
+  .subtitle {
+    color: #888;
+    font-size: 0.85rem;
+    margin-bottom: 32px;
+  }
+  .maps {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .map-card {
+    width: 260px;
+    padding: 28px 20px;
+    background: rgba(255,255,255,0.04);
+    border: 2px solid rgba(78,204,163,0.3);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.25s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .map-card:hover {
+    border-color: #4ecca3;
+    background: rgba(78,204,163,0.08);
+    transform: translateY(-2px);
+  }
+  .map-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+  .map-name {
+    font-size: 1.2rem;
+    color: #4ecca3;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .map-desc {
+    font-size: 0.78rem;
+    color: #999;
+    line-height: 1.5;
+  }
+  .map-genus {
+    font-size: 0.7rem;
+    color: #666;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>3D 贪吃蛇</h1>
+  <div class="subtitle">选择地图开始游戏</div>
+  <div class="maps">
+    <a class="map-card" href="snake3d.html?map=torus">
+      <div class="map-icon">🔘</div>
+      <div class="map-name">环 面</div>
+      <div class="map-desc">经典甜甜圈表面<br>两个方向自由环绕</div>
+      <div class="map-genus">亏格 1</div>
+    </a>
+    <a class="map-card" href="snake3d.html?map=sphere">
+      <div class="map-icon">🌐</div>
+      <div class="map-name">球 面</div>
+      <div class="map-desc">经典球面<br>两个方向自由环绕</div>
+      <div class="map-genus">亏格 0</div>
+    </a>
+    <a class="map-card" href="snake3d.html?map=genus2">
+      <div class="map-icon">∞</div>
+      <div class="map-name">双孔曲面</div>
+      <div class="map-desc">∞ 形双孔曲面<br>沿两孔连续穿梭</div>
+      <div class="map-genus">亏格 2</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>
