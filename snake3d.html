@@ -158,6 +158,7 @@
   <div class="bottom-bar">
     <div class="btn-row">
       <button id="restart">重新开始</button>
+      <button class="btn2" id="pauseBtn">暂停</button>
       <button class="btn2" id="resetCam">重置视角</button>
     </div>
     <div class="legend">
@@ -173,7 +174,7 @@
       <span><span class="dot" style="background:#e67e22"></span>加速</span>
       <span><span class="dot" style="background:#6c3483"></span>-命</span>
     </div>
-    <div class="tip">方向键 / WASD · 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角</div>
+    <div class="tip">方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角</div>
   </div>
 </div>
 
@@ -1089,6 +1090,13 @@ function updateUI() {
   document.getElementById('lives').textContent = hearts.join(' ') || '💀';
   document.getElementById('speedLabel').textContent = speedLabel();
   document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
+  document.getElementById('pauseBtn').textContent = paused ? '继续' : '暂停';
+}
+
+function togglePause() {
+  if (!running) return;
+  paused = !paused;
+  updateUI();
 }
 
 function setMsg(text, cls) {
@@ -1306,10 +1314,9 @@ function resetCamera() {
 document.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
 
-  if (key === ' ' || key === 'spacebar') {
+  if (key === ' ' || key === 'spacebar' || key === 'p') {
     e.preventDefault();
-    if (running) paused = !paused;
-    updateUI();
+    togglePause();
     return;
   }
 
@@ -1335,6 +1342,7 @@ document.getElementById('restart').addEventListener('click', () => {
   loop = setInterval(gameTick, speed);
 });
 
+document.getElementById('pauseBtn').addEventListener('click', togglePause);
 document.getElementById('resetCam').addEventListener('click', resetCamera);
 
 /* ===========================
