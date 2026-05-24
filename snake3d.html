@@ -213,7 +213,7 @@ const FOOD_DEF = {
 
 const urlParams = new URLSearchParams(location.search);
 const requestedMap = urlParams.get('map');
-const MAP_TYPE = ['torus', 'sphere', 'genus2', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
+const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
 
 /* ===========================
    TORUS MESH
@@ -231,7 +231,7 @@ function ensureSurfaceGeometry() {
       map: gridTex,
       roughness: 0.55,
       metalness: 0.1,
-      side: ['sphere', 'genus2', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
+      side: ['sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
     });
   }
   if (!markMaterialFront) {
@@ -240,6 +240,9 @@ function ensureSurfaceGeometry() {
       markMaterialBack = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexBack[faceKey], THREE.DoubleSide));
     } else if (MAP_TYPE === 'genus2') {
       markMaterialFront = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTex[face.key], THREE.DoubleSide));
+      markMaterialBack = null;
+    } else if (MAP_TYPE === 'projective') {
+      markMaterialFront = createMarkMaterial(markTexFront, THREE.DoubleSide);
       markMaterialBack = null;
     } else {
       markMaterialFront = createMarkMaterial(markTexFront, THREE.FrontSide);
@@ -258,6 +261,8 @@ function ensureSurfaceGeometry() {
     geo = createCubeSphereGeometry();
   } else if (MAP_TYPE === 'genus2') {
     geo = createGenus2Geometry();
+  } else if (MAP_TYPE === 'projective') {
+    geo = createProjectiveGeometry();
   } else if (MAP_TYPE === 'mobius') {
     geo = createMobiusGeometry();
   } else if (MAP_TYPE === 'klein') {
@@ -269,7 +274,7 @@ function ensureSurfaceGeometry() {
   torusMesh.position.set(0, 0, 0);
   scene.add(torusMesh);
 
-  if (MAP_TYPE === 'genus2') {
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') {
     markMeshFront = new THREE.Mesh(geo, markMaterialFront);
     markMeshFront.renderOrder = 2;
     scene.add(markMeshFront);
@@ -719,6 +724,35 @@ function createMobiusGeometry() {
   return createParametricGridGeometry(128, 20, mobiusPointUV);
 }
 
+function projectiveSquareToDisk(a, b) {
+  return {
+    x: a * Math.sqrt(Math.max(0, 1 - (b * b) / 2)),
+    y: b * Math.sqrt(Math.max(0, 1 - (a * a) / 2)),
+  };
+}
+
+function projectivePointUV(u01, v01) {
+  const a = u01 * 2 - 1;
+  const b = v01 * 2 - 1;
+  const disk = projectiveSquareToDisk(a, b);
+  const radius = Math.min(1, Math.hypot(disk.x, disk.y));
+  const theta = Math.atan2(disk.y, disk.x);
+  const v = radius * Math.PI / 2;
+  const x = Math.cos(theta) * Math.sin(2 * v);
+  const y = Math.sin(theta) * Math.sin(2 * v);
+  const z = Math.cos(v) ** 2 - Math.cos(theta) ** 2 * Math.sin(v) ** 2;
+  const s = 1.35 * fieldScale;
+  return new THREE.Vector3(
+    x * s,
+    z * s * 0.78,
+    y * s,
+  );
+}
+
+function createProjectiveGeometry() {
+  return createParametricGridGeometry(128, 128, projectivePointUV);
+}
+
 function kleinPointUV(u01, v01) {
   const u = u01 * Math.PI * 2;
   const v = v01 * Math.PI * 2;
@@ -946,6 +980,17 @@ function drawSnakeMark(ctx, s, i) {
 }
 
 function drawSurfaceGrid(ctx, size) {
+  if (MAP_TYPE === 'projective') {
+    ctx.strokeStyle = 'rgba(78,204,163,0.08)';
+    ctx.lineWidth = 1;
+    const px = size / GRID_SIZE;
+    for (let i = 2; i < GRID_SIZE; i += 2) {
+      const pos = i * px;
+      ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
+    }
+    return;
+  }
   ctx.strokeStyle = 'rgba(78,204,163,0.2)';
   ctx.lineWidth = 1;
   const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
@@ -1005,6 +1050,10 @@ function to3D(gx, gy, face = 'F') {
     const p = genus2Point(gx, gy, face || genus2StartFaceKey());
     return { x: p.x, y: p.y, z: p.z };
   }
+  if (MAP_TYPE === 'projective') {
+    const p = projectivePointUV((gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
+    return { x: p.x, y: p.y, z: p.z };
+  }
   if (MAP_TYPE === 'sphere') {
     const p = cubeSpherePoint(face, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
     return { x: p.x, y: p.y, z: p.z };
@@ -1036,6 +1085,14 @@ function surfaceNormal(gx, gy, face = 'F') {
   if (MAP_TYPE === 'genus2') {
     const p = genus2Point(gx, gy, face || genus2StartFaceKey());
     return estimateGenus2Normal(p.x, p.y, p.z);
+  }
+  if (MAP_TYPE === 'projective') {
+    const u = gx / GRID_SIZE;
+    const v = gy / GRID_SIZE;
+    const step = 1 / GRID_SIZE;
+    const du = projectivePointUV(u + step, v).sub(projectivePointUV(u - step, v));
+    const dv = projectivePointUV(u, v + step).sub(projectivePointUV(u, v - step));
+    return new THREE.Vector3().crossVectors(du, dv).normalize();
   }
   if (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') {
     const u = gx / GRID_SIZE;
@@ -1203,6 +1260,22 @@ function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
 
   if (MAP_TYPE === 'genus2') {
     return normalizeGenus2Position(gx, gy, ndir, nside, face || genus2StartFaceKey());
+  }
+
+  if (MAP_TYPE === 'projective') {
+    while (gx < 0 || gx >= GRID_SIZE) {
+      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
+      gy = GRID_SIZE - 1 - gy;
+      mirror *= -1;
+      if (ndir) ndir.dy *= -1;
+    }
+    while (gy < 0 || gy >= GRID_SIZE) {
+      gy += gy < 0 ? GRID_SIZE : -GRID_SIZE;
+      gx = GRID_SIZE - 1 - gx;
+      mirror *= -1;
+      if (ndir) ndir.dx *= -1;
+    }
+    return { gx, gy, dir: ndir, side: 1, mirror };
   }
 
   if (MAP_TYPE === 'mobius') {
