@@ -981,10 +981,10 @@ function drawSnakeMark(ctx, s, i) {
 
 function drawSurfaceGrid(ctx, size) {
   if (MAP_TYPE === 'projective') {
-    ctx.strokeStyle = 'rgba(78,204,163,0.08)';
+    ctx.strokeStyle = 'rgba(78,204,163,0.07)';
     ctx.lineWidth = 1;
     const px = size / GRID_SIZE;
-    for (let i = 2; i < GRID_SIZE; i += 2) {
+    for (let i = 1; i < GRID_SIZE; i++) {
       const pos = i * px;
       ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
