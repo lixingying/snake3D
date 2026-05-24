@@ -234,7 +234,7 @@ function ensureSurfaceGeometry() {
       side: ['sphere', 'genus2', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
     });
   }
-  if (!markMaterialFront) {
+  if (!markMaterialFront && MAP_TYPE !== 'genus2') {
     if (MAP_TYPE === 'sphere') {
       markMaterialFront = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexFront[faceKey], THREE.DoubleSide));
       markMaterialBack = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexBack[faceKey], THREE.DoubleSide));
@@ -266,12 +266,14 @@ function ensureSurfaceGeometry() {
   torusMesh.position.set(0, 0, 0);
   scene.add(torusMesh);
 
-  markMeshFront = new THREE.Mesh(geo, markMaterialFront);
-  markMeshBack = new THREE.Mesh(geo, markMaterialBack);
-  markMeshFront.renderOrder = 2;
-  markMeshBack.renderOrder = 2;
-  scene.add(markMeshFront);
-  scene.add(markMeshBack);
+  if (MAP_TYPE !== 'genus2') {
+    markMeshFront = new THREE.Mesh(geo, markMaterialFront);
+    markMeshBack = new THREE.Mesh(geo, markMaterialBack);
+    markMeshFront.renderOrder = 2;
+    markMeshBack.renderOrder = 2;
+    scene.add(markMeshFront);
+    scene.add(markMeshBack);
+  }
 }
 
 function getR() { return BASE_R * fieldScale; }
@@ -402,11 +404,9 @@ const GENUS2_CENTER_OFFSET = 0.58;
 const GENUS2_RING_R = 0.58;
 const GENUS2_TUBE_R = 0.27;
 const GENUS2_SMOOTH = 0.18;
-const GENUS2_RESOLUTION = 44;
-
-function wrap01(t) {
-  return ((t % 1) + 1) % 1;
-}
+const GENUS2_PATCH_CELLS = 8;
+const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS * 2;
+const GENUS2_POLYCUBE_SCALE = { x: 0.58, y: 0.55, z: 0.54 };
 
 function smoothMin(a, b, k) {
   const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k));
@@ -437,140 +437,210 @@ function estimateGenus2Normal(x, y, z) {
   ).normalize();
 }
 
-function genus2UV(p) {
-  const offset = GENUS2_CENTER_OFFSET * fieldScale;
-  const R = GENUS2_RING_R * fieldScale;
-  const rightSide = p.x >= 0;
-  const cx = rightSide ? offset : -offset;
-  const dx = p.x - cx;
-  const theta = Math.atan2(p.y, dx);
-  const localU = rightSide ? wrap01((theta - Math.PI) / (Math.PI * 2)) : wrap01(theta / (Math.PI * 2));
-  const phi = Math.atan2(p.z, Math.hypot(dx, p.y) - R);
+const GENUS2_FACE_DIRECTIONS = [
+  { key: 'PX', n: [ 1,  0,  0], r: [ 0,  1,  0], d: [ 0,  0, -1] },
+  { key: 'NX', n: [-1,  0,  0], r: [ 0, -1,  0], d: [ 0,  0, -1] },
+  { key: 'PY', n: [ 0,  1,  0], r: [-1,  0,  0], d: [ 0,  0, -1] },
+  { key: 'NY', n: [ 0, -1,  0], r: [ 1,  0,  0], d: [ 0,  0, -1] },
+  { key: 'PZ', n: [ 0,  0,  1], r: [ 1,  0,  0], d: [ 0, -1,  0] },
+  { key: 'NZ', n: [ 0,  0, -1], r: [ 1,  0,  0], d: [ 0,  1,  0] },
+];
+const GENUS2_EDGE_KEYS = ['L', 'R', 'U', 'D'];
+let genus2TopologyCache = null;
+
+function vec3Key(x, y, z) {
+  return `${x},${y},${z}`;
+}
+
+function vAdd(a, b) {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function vSub(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vScale(a, s) {
+  return [a[0] * s, a[1] * s, a[2] * s];
+}
+
+function vDot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function genus2VoxelPoint(face, u, v) {
+  return vAdd(
+    vAdd(face.c, vScale(face.n, 0.5)),
+    vAdd(vScale(face.r, u - 0.5), vScale(face.d, v - 0.5)),
+  );
+}
+
+function genus2EdgePoint(face, edge, t) {
+  if (edge === 'L') return genus2VoxelPoint(face, 0, t);
+  if (edge === 'R') return genus2VoxelPoint(face, 1, t);
+  if (edge === 'U') return genus2VoxelPoint(face, t, 0);
+  return genus2VoxelPoint(face, t, 1);
+}
+
+function genus2EdgeKey(a, b) {
+  const pa = a.map(v => Math.round(v * 2)).join(',');
+  const pb = b.map(v => Math.round(v * 2)).join(',');
+  return pa < pb ? `${pa}|${pb}` : `${pb}|${pa}`;
+}
+
+function buildGenus2Topology() {
+  const voxels = [];
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -2; x <= 2; x++) {
+      if ((x === -1 || x === 1) && y === 0) continue;
+      voxels.push({ x, y, z: 0 });
+    }
+  }
+
+  const solid = new Set(voxels.map(v => vec3Key(v.x, v.y, v.z)));
+  const faces = [];
+  const faceMap = new Map();
+
+  for (const voxel of voxels) {
+    for (const dir of GENUS2_FACE_DIRECTIONS) {
+      const nx = voxel.x + dir.n[0];
+      const ny = voxel.y + dir.n[1];
+      const nz = voxel.z + dir.n[2];
+      if (solid.has(vec3Key(nx, ny, nz))) continue;
+      const face = {
+        key: `G2_${voxel.x}_${voxel.y}_${voxel.z}_${dir.key}`,
+        c: [voxel.x, voxel.y, voxel.z],
+        n: dir.n,
+        r: dir.r,
+        d: dir.d,
+        transitions: {},
+      };
+      faces.push(face);
+      faceMap.set(face.key, face);
+    }
+  }
+
+  const edgeMap = new Map();
+  for (const face of faces) {
+    for (const edge of GENUS2_EDGE_KEYS) {
+      const key = genus2EdgeKey(genus2EdgePoint(face, edge, 0), genus2EdgePoint(face, edge, 1));
+      if (!edgeMap.has(key)) edgeMap.set(key, []);
+      edgeMap.get(key).push({ face, edge });
+    }
+  }
+
+  for (const records of edgeMap.values()) {
+    if (records.length !== 2) continue;
+    const [a, b] = records;
+    a.face.transitions[a.edge] = { face: b.face.key, edge: b.edge };
+    b.face.transitions[b.edge] = { face: a.face.key, edge: a.edge };
+  }
+
+  const startFace = faces.find(face =>
+    face.c[0] === -2 && face.c[1] === -1 && face.n[2] === 1
+  ) || faces[0];
+  return { faces, faceMap, startFaceKey: startFace.key };
+}
+
+function getGenus2Topology() {
+  if (!genus2TopologyCache) genus2TopologyCache = buildGenus2Topology();
+  return genus2TopologyCache;
+}
+
+function genus2StartFaceKey() {
+  return getGenus2Topology().startFaceKey;
+}
+
+function randomGenus2FaceKey() {
+  const faces = getGenus2Topology().faces;
+  return faces[Math.floor(Math.random() * faces.length)].key;
+}
+
+function genus2LocalUVFromVoxel(face, p) {
+  const center = vAdd(face.c, vScale(face.n, 0.5));
+  const delta = vSub(p, center);
   return {
-    u: rightSide ? 0.5 + localU * 0.5 : localU * 0.5,
-    v: wrap01(phi / (Math.PI * 2)),
+    u: vDot(delta, face.r) + 0.5,
+    v: vDot(delta, face.d) + 0.5,
   };
 }
 
-function genus2Point(gx, gy) {
-  const halfGrid = GRID_SIZE / 2;
-  const rightSide = gx >= halfGrid;
-  const localX = rightSide ? gx - halfGrid : gx;
-  const localU = localX / halfGrid;
-  const theta = (rightSide ? Math.PI : 0) + localU * Math.PI * 2;
-  const phi = (gy / GRID_SIZE) * Math.PI * 2;
-  const offset = GENUS2_CENTER_OFFSET * fieldScale;
-  const R = GENUS2_RING_R * fieldScale;
-  const r = GENUS2_TUBE_R * fieldScale;
-  const cx = rightSide ? offset : -offset;
-  const ring = R + r * Math.cos(phi);
+function genus2RawPoint(faceKey, u, v) {
+  const topology = getGenus2Topology();
+  const face = topology.faceMap.get(faceKey) || topology.faceMap.get(topology.startFaceKey);
+  const p = genus2VoxelPoint(face, u, v);
   return new THREE.Vector3(
-    cx + ring * Math.cos(theta),
-    ring * Math.sin(theta),
-    r * Math.sin(phi),
+    p[0] * GENUS2_POLYCUBE_SCALE.x * fieldScale,
+    p[1] * GENUS2_POLYCUBE_SCALE.y * fieldScale,
+    p[2] * GENUS2_POLYCUBE_SCALE.z * fieldScale,
+  );
+}
+
+function projectToGenus2Surface(point) {
+  const p = point.clone();
+  for (let i = 0; i < 9; i++) {
+    const value = genus2Field(p.x, p.y, p.z);
+    if (Math.abs(value) < 0.0008 * fieldScale) break;
+    const normal = estimateGenus2Normal(p.x, p.y, p.z);
+    p.addScaledVector(normal, -value);
+  }
+  return p;
+}
+
+function genus2SurfacePoint(faceKey, u, v, lift = 0) {
+  const p = projectToGenus2Surface(genus2RawPoint(faceKey, u, v));
+  if (lift !== 0) p.addScaledVector(estimateGenus2Normal(p.x, p.y, p.z), lift * fieldScale);
+  return p;
+}
+
+function genus2Point(gx, gy, faceKey = null) {
+  const face = faceKey || genus2StartFaceKey();
+  return genus2SurfacePoint(
+    face,
+    (gx + 0.5) / GENUS2_PATCH_CELLS,
+    (gy + 0.5) / GENUS2_PATCH_CELLS,
   );
 }
 
 function createGenus2Geometry() {
-  const scale = fieldScale;
-  const bounds = {
-    minX: -1.52 * scale, maxX: 1.52 * scale,
-    minY: -0.92 * scale, maxY: 0.92 * scale,
-    minZ: -0.46 * scale, maxZ: 0.46 * scale,
-  };
-  const n = GENUS2_RESOLUTION;
-  const nx = n + 1, ny = n + 1, nz = n + 1;
-  const dx = (bounds.maxX - bounds.minX) / n;
-  const dy = (bounds.maxY - bounds.minY) / n;
-  const dz = (bounds.maxZ - bounds.minZ) / n;
-  const values = new Float32Array(nx * ny * nz);
-
-  const idx = (i, j, k) => i + nx * (j + ny * k);
-  const point = (i, j, k) => new THREE.Vector3(
-    bounds.minX + i * dx,
-    bounds.minY + j * dy,
-    bounds.minZ + k * dz,
-  );
-
-  for (let k = 0; k < nz; k++) {
-    const z = bounds.minZ + k * dz;
-    for (let j = 0; j < ny; j++) {
-      const y = bounds.minY + j * dy;
-      for (let i = 0; i < nx; i++) {
-        const x = bounds.minX + i * dx;
-        values[idx(i, j, k)] = genus2Field(x, y, z);
-      }
-    }
-  }
-
   const positions = [];
   const uvs = [];
-  const cubeCorners = [
-    [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-    [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
-  ];
-  const tetrahedra = [
-    [0, 5, 1, 6],
-    [0, 1, 2, 6],
-    [0, 2, 3, 6],
-    [0, 3, 7, 6],
-    [0, 7, 4, 6],
-    [0, 4, 5, 6],
-  ];
-  const tetEdges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+  const topology = getGenus2Topology();
+  const segments = GENUS2_PATCH_RENDER_SEGMENTS;
 
-  function addVertex(p) {
-    const uv = genus2UV(p);
+  function addVertex(p, u, v) {
     positions.push(p.x, p.y, p.z);
-    uvs.push(uv.u, uv.v);
+    uvs.push(u, v);
   }
 
-  function addTriangle(a, b, c) {
+  function addTriangle(a, b, c, auv, buv, cuv) {
     const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3);
     const outward = estimateGenus2Normal(center.x, center.y, center.z);
     const winding = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
     if (winding.dot(outward) < 0) {
-      addVertex(a); addVertex(c); addVertex(b);
+      addVertex(a, auv.u, auv.v);
+      addVertex(c, cuv.u, cuv.v);
+      addVertex(b, buv.u, buv.v);
     } else {
-      addVertex(a); addVertex(b); addVertex(c);
+      addVertex(a, auv.u, auv.v);
+      addVertex(b, buv.u, buv.v);
+      addVertex(c, cuv.u, cuv.v);
     }
   }
 
-  function polygonToTriangles(points) {
-    if (points.length < 3) return;
-    const center = points.reduce((acc, p) => acc.add(p), new THREE.Vector3()).multiplyScalar(1 / points.length);
-    const normal = estimateGenus2Normal(center.x, center.y, center.z);
-    let axis = new THREE.Vector3().subVectors(points[0], center).normalize();
-    if (axis.lengthSq() < 1e-8) axis = new THREE.Vector3(1, 0, 0);
-    const axis2 = new THREE.Vector3().crossVectors(normal, axis).normalize();
-    const sorted = points.slice().sort((a, b) => {
-      const da = new THREE.Vector3().subVectors(a, center);
-      const db = new THREE.Vector3().subVectors(b, center);
-      return Math.atan2(da.dot(axis2), da.dot(axis)) - Math.atan2(db.dot(axis2), db.dot(axis));
-    });
-    for (let i = 1; i < sorted.length - 1; i++) {
-      addTriangle(sorted[0], sorted[i], sorted[i + 1]);
-    }
-  }
-
-  function polygoniseTet(tet, corners, cornerValues) {
-    const pts = [];
-    for (const [ia, ib] of tetEdges) {
-      const ca = tet[ia], cb = tet[ib];
-      const va = cornerValues[ca], vb = cornerValues[cb];
-      if ((va <= 0 && vb <= 0) || (va > 0 && vb > 0)) continue;
-      const t = va / (va - vb);
-      pts.push(new THREE.Vector3().lerpVectors(corners[ca], corners[cb], t));
-    }
-    polygonToTriangles(pts);
-  }
-
-  for (let k = 0; k < n; k++) {
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const corners = cubeCorners.map(([ox, oy, oz]) => point(i + ox, j + oy, k + oz));
-        const cornerValues = cubeCorners.map(([ox, oy, oz]) => values[idx(i + ox, j + oy, k + oz)]);
-        for (const tet of tetrahedra) polygoniseTet(tet, corners, cornerValues);
+  for (const face of topology.faces) {
+    for (let y = 0; y < segments; y++) {
+      const v0 = y / segments;
+      const v1 = (y + 1) / segments;
+      for (let x = 0; x < segments; x++) {
+        const u0 = x / segments;
+        const u1 = (x + 1) / segments;
+        const p00 = genus2SurfacePoint(face.key, u0, v0);
+        const p10 = genus2SurfacePoint(face.key, u1, v0);
+        const p01 = genus2SurfacePoint(face.key, u0, v1);
+        const p11 = genus2SurfacePoint(face.key, u1, v1);
+        addTriangle(p00, p10, p01, { u: u0, v: v0 }, { u: u1, v: v0 }, { u: u0, v: v1 });
+        addTriangle(p10, p11, p01, { u: u1, v: v0 }, { u: u1, v: v1 }, { u: u0, v: v1 });
       }
     }
   }
@@ -669,6 +739,9 @@ const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 scene.fog = new THREE.Fog(0x1a1a2e, 4, 12);
+const genus2MarkerGroup = new THREE.Group();
+genus2MarkerGroup.renderOrder = 3;
+scene.add(genus2MarkerGroup);
 
 const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
 camera.position.set(3.5, 2.8, 5.5);
@@ -769,8 +842,23 @@ function createMarkMaterial(map, side) {
   });
 }
 
+const genus2MarkerMaterials = {
+  head: new THREE.MeshBasicMaterial({ color: 0xffdd57, side: THREE.DoubleSide, depthWrite: false }),
+  body: new THREE.MeshBasicMaterial({ color: 0xff8c42, side: THREE.DoubleSide, depthWrite: false }),
+  food: {},
+};
+for (const [key, def] of Object.entries(FOOD_DEF)) {
+  genus2MarkerMaterials.food[key] = new THREE.MeshBasicMaterial({
+    color: def.color,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+}
+
 function textureCellPx() {
-  return (MAP_TYPE === 'sphere' ? SPHERE_FACE_TEX_SIZE : TEX_SIZE) / GRID_SIZE;
+  if (MAP_TYPE === 'sphere') return SPHERE_FACE_TEX_SIZE / GRID_SIZE;
+  if (MAP_TYPE === 'genus2') return TEX_SIZE / GENUS2_PATCH_CELLS;
+  return TEX_SIZE / GRID_SIZE;
 }
 
 function markContextFor(item) {
@@ -782,7 +870,8 @@ function markContextFor(item) {
 
 function cellCenter(gx, gy, face = 'F') {
   const size = MAP_TYPE === 'sphere' ? SPHERE_FACE_TEX_SIZE : TEX_SIZE;
-  const px = size / GRID_SIZE;
+  const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+  const px = size / gridSize;
   return {
     x: (gx + 0.5) * px,
     y: (gy + 0.5) * px,
@@ -844,11 +933,69 @@ function drawSnakeMark(ctx, s, i) {
 function drawSurfaceGrid(ctx, size) {
   ctx.strokeStyle = 'rgba(78,204,163,0.2)';
   ctx.lineWidth = 1;
-  const px = size / GRID_SIZE;
-  for (let i = 0; i <= GRID_SIZE; i++) {
+  const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+  const px = size / gridSize;
+  for (let i = 0; i <= gridSize; i++) {
     const pos = i * px;
     ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
+  }
+}
+
+function clearGenus2Markers() {
+  while (genus2MarkerGroup.children.length > 0) {
+    const child = genus2MarkerGroup.children[genus2MarkerGroup.children.length - 1];
+    genus2MarkerGroup.remove(child);
+    child.geometry.dispose();
+  }
+}
+
+function createGenus2CellMarkerGeometry(item, inset = 0.14, lift = 0.018) {
+  const face = item.face || genus2StartFaceKey();
+  const n = GENUS2_PATCH_CELLS;
+  const u0 = (item.gx + inset) / n;
+  const u1 = (item.gx + 1 - inset) / n;
+  const v0 = (item.gy + inset) / n;
+  const v1 = (item.gy + 1 - inset) / n;
+  const p00 = genus2SurfacePoint(face, u0, v0, lift);
+  const p10 = genus2SurfacePoint(face, u1, v0, lift);
+  const p01 = genus2SurfacePoint(face, u0, v1, lift);
+  const p11 = genus2SurfacePoint(face, u1, v1, lift);
+  const positions = [];
+
+  function pushTriangle(a, b, c) {
+    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3);
+    const outward = estimateGenus2Normal(center.x, center.y, center.z);
+    const winding = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
+    const verts = winding.dot(outward) < 0 ? [a, c, b] : [a, b, c];
+    for (const p of verts) positions.push(p.x, p.y, p.z);
+  }
+
+  pushTriangle(p00, p10, p01);
+  pushTriangle(p10, p11, p01);
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function redrawGenus2Markers() {
+  clearGenus2Markers();
+
+  for (const f of foods) {
+    const material = genus2MarkerMaterials.food[f.type] || genus2MarkerMaterials.food.grow;
+    const mesh = new THREE.Mesh(createGenus2CellMarkerGeometry(f, 0.22, 0.024), material);
+    mesh.renderOrder = 3;
+    genus2MarkerGroup.add(mesh);
+  }
+
+  for (let i = snake.length - 1; i >= 0; i--) {
+    const s = snake[i];
+    const material = i === 0 ? genus2MarkerMaterials.head : genus2MarkerMaterials.body;
+    const mesh = new THREE.Mesh(createGenus2CellMarkerGeometry(s, i === 0 ? 0.10 : 0.16, 0.028), material);
+    mesh.renderOrder = 4;
+    genus2MarkerGroup.add(mesh);
   }
 }
 
@@ -869,12 +1016,17 @@ function redrawTexture() {
     sphereMarkCtxBack[faceKey].clearRect(0, 0, SPHERE_FACE_TEX_SIZE, SPHERE_FACE_TEX_SIZE);
   }
 
-  for (const f of foods) {
-    drawFoodMark(markContextFor(f), f);
-  }
+  if (MAP_TYPE === 'genus2') {
+    redrawGenus2Markers();
+  } else {
+    clearGenus2Markers();
+    for (const f of foods) {
+      drawFoodMark(markContextFor(f), f);
+    }
 
-  for (let i = snake.length - 1; i >= 0; i--) {
-    drawSnakeMark(markContextFor(snake[i]), snake[i], i);
+    for (let i = snake.length - 1; i >= 0; i--) {
+      drawSnakeMark(markContextFor(snake[i]), snake[i], i);
+    }
   }
 
   gridTex.needsUpdate = true;
@@ -891,7 +1043,7 @@ function redrawTexture() {
    =========================== */
 function to3D(gx, gy, face = 'F') {
   if (MAP_TYPE === 'genus2') {
-    const p = genus2Point(gx, gy);
+    const p = genus2Point(gx, gy, face || genus2StartFaceKey());
     return { x: p.x, y: p.y, z: p.z };
   }
   if (MAP_TYPE === 'sphere') {
@@ -923,16 +1075,8 @@ function to3D(gx, gy, face = 'F') {
 
 function surfaceNormal(gx, gy, face = 'F') {
   if (MAP_TYPE === 'genus2') {
-    const halfGrid = GRID_SIZE / 2;
-    const rightSide = gx >= halfGrid;
-    const localX = rightSide ? gx - halfGrid : gx;
-    const theta = (rightSide ? Math.PI : 0) + (localX / halfGrid) * Math.PI * 2;
-    const phi = (gy / GRID_SIZE) * Math.PI * 2;
-    return new THREE.Vector3(
-      Math.cos(theta) * Math.cos(phi),
-      Math.sin(theta) * Math.cos(phi),
-      Math.sin(phi),
-    ).normalize();
+    const p = genus2Point(gx, gy, face || genus2StartFaceKey());
+    return estimateGenus2Normal(p.x, p.y, p.z);
   }
   if (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') {
     const u = gx / GRID_SIZE;
@@ -975,6 +1119,10 @@ function clampCell(v) {
   return Math.max(0, Math.min(GRID_SIZE - 1, v));
 }
 
+function clampGenus2Cell(v) {
+  return Math.max(0, Math.min(GENUS2_PATCH_CELLS - 1, v));
+}
+
 function normalizeCubeSpherePosition(gx, gy, dir, side, faceKey) {
   let currentFace = faceKey || 'F';
   let ndir = dir ? { ...dir } : null;
@@ -1011,6 +1159,80 @@ function normalizeCubeSpherePosition(gx, gy, dir, side, faceKey) {
   };
 }
 
+function genus2InwardDirection(edge) {
+  if (edge === 'L') return { dx: 1, dy: 0 };
+  if (edge === 'R') return { dx: -1, dy: 0 };
+  if (edge === 'U') return { dx: 0, dy: 1 };
+  return { dx: 0, dy: -1 };
+}
+
+function genus2EntryCell(edge, edgeCell) {
+  if (edge === 'L') return { gx: 0, gy: edgeCell };
+  if (edge === 'R') return { gx: GENUS2_PATCH_CELLS - 1, gy: edgeCell };
+  if (edge === 'U') return { gx: edgeCell, gy: 0 };
+  return { gx: edgeCell, gy: GENUS2_PATCH_CELLS - 1 };
+}
+
+function genus2EdgeSample(face, edge, edgeCell) {
+  const t = (edgeCell + 0.5) / GENUS2_PATCH_CELLS;
+  return genus2EdgePoint(face, edge, t);
+}
+
+function normalizeGenus2Position(gx, gy, dir, side, faceKey) {
+  const topology = getGenus2Topology();
+  let currentFaceKey = faceKey || topology.startFaceKey;
+  let ndir = dir ? { ...dir } : null;
+  let guard = 0;
+
+  while ((gx < 0 || gx >= GENUS2_PATCH_CELLS || gy < 0 || gy >= GENUS2_PATCH_CELLS) && guard++ < 20) {
+    let edge;
+    let overshoot;
+    let edgeCell;
+    if (gx < 0) {
+      edge = 'L';
+      overshoot = -gx - 1;
+      edgeCell = clampGenus2Cell(gy);
+    } else if (gx >= GENUS2_PATCH_CELLS) {
+      edge = 'R';
+      overshoot = gx - GENUS2_PATCH_CELLS;
+      edgeCell = clampGenus2Cell(gy);
+    } else if (gy < 0) {
+      edge = 'U';
+      overshoot = -gy - 1;
+      edgeCell = clampGenus2Cell(gx);
+    } else {
+      edge = 'D';
+      overshoot = gy - GENUS2_PATCH_CELLS;
+      edgeCell = clampGenus2Cell(gx);
+    }
+
+    const currentFace = topology.faceMap.get(currentFaceKey);
+    const transition = currentFace?.transitions[edge];
+    if (!transition) return { gx, gy, dir: ndir, side, face: currentFaceKey, blocked: true };
+
+    const sample = genus2EdgeSample(currentFace, edge, edgeCell);
+    const nextFace = topology.faceMap.get(transition.face);
+    const uv = genus2LocalUVFromVoxel(nextFace, sample);
+    const nextEdgeCell = transition.edge === 'L' || transition.edge === 'R'
+      ? clampGenus2Cell(Math.floor(uv.v * GENUS2_PATCH_CELLS))
+      : clampGenus2Cell(Math.floor(uv.u * GENUS2_PATCH_CELLS));
+    const entry = genus2EntryCell(transition.edge, nextEdgeCell);
+    ndir = genus2InwardDirection(transition.edge);
+    gx = entry.gx + ndir.dx * overshoot;
+    gy = entry.gy + ndir.dy * overshoot;
+    currentFaceKey = transition.face;
+  }
+
+  return {
+    gx: clampGenus2Cell(gx),
+    gy: clampGenus2Cell(gy),
+    dir: ndir,
+    side,
+    face: currentFaceKey,
+    mirror: 1,
+  };
+}
+
 function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
   const ndir = dir ? { ...dir } : null;
   let nside = side;
@@ -1018,6 +1240,10 @@ function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
 
   if (MAP_TYPE === 'sphere') {
     return normalizeCubeSpherePosition(gx, gy, ndir, nside, face || 'F');
+  }
+
+  if (MAP_TYPE === 'genus2') {
+    return normalizeGenus2Position(gx, gy, ndir, nside, face || genus2StartFaceKey());
   }
 
   if (MAP_TYPE === 'mobius') {
@@ -1052,6 +1278,20 @@ function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
 }
 
 function resetSnake() {
+  if (MAP_TYPE === 'genus2') {
+    const face = genus2StartFaceKey();
+    const gy = Math.floor(GENUS2_PATCH_CELLS / 2);
+    snake = [
+      { gx: 3, gy, side: 1, face },
+      { gx: 2, gy, side: 1, face },
+      { gx: 1, gy, side: 1, face },
+    ];
+    direction = { dx: 1, dy: 0 };
+    nextDir = { dx: 1, dy: 0 };
+    chartDisplayDir = { dx: 1, dy: 0 };
+    chartMirror = 1;
+    return;
+  }
   const face = MAP_TYPE === 'sphere' ? 'F' : null;
   snake = [
     { gx: 10, gy: 10, side: 1, face },
@@ -1154,10 +1394,13 @@ function trySpawnFood() {
   if (foods.length >= MAX_FOODS) return;
   const type = pickFoodType();
   for (let attempt = 0; attempt < 80; attempt++) {
-    const gx = Math.floor(Math.random() * GRID_SIZE);
-    const gy = Math.floor(Math.random() * GRID_SIZE);
+    const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+    const gx = Math.floor(Math.random() * gridSize);
+    const gy = Math.floor(Math.random() * gridSize);
     const side = ['mobius', 'klein'].includes(MAP_TYPE) && Math.random() < 0.5 ? -1 : 1;
-    const face = MAP_TYPE === 'sphere' ? CUBE_FACE_KEYS[Math.floor(Math.random() * CUBE_FACE_KEYS.length)] : null;
+    const face = MAP_TYPE === 'sphere'
+      ? CUBE_FACE_KEYS[Math.floor(Math.random() * CUBE_FACE_KEYS.length)]
+      : (MAP_TYPE === 'genus2' ? randomGenus2FaceKey() : null);
     if (!isOccupied(gx, gy, side, face)) {
       foods.push({ gx, gy, side, face, type, age: 0 });
       return;
@@ -1238,6 +1481,10 @@ function die(reason = '撞到自己！') {
 }
 
 function resetSnakeOnDeath() {
+  if (MAP_TYPE === 'genus2') {
+    resetSnake();
+    return;
+  }
   const face = MAP_TYPE === 'sphere' ? 'F' : null;
   snake = [
     { gx: 10, gy: 10, side: 1, face },
