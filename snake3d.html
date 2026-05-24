@@ -234,10 +234,13 @@ function ensureSurfaceGeometry() {
       side: ['sphere', 'genus2', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
     });
   }
-  if (!markMaterialFront && MAP_TYPE !== 'genus2') {
+  if (!markMaterialFront) {
     if (MAP_TYPE === 'sphere') {
       markMaterialFront = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexFront[faceKey], THREE.DoubleSide));
       markMaterialBack = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexBack[faceKey], THREE.DoubleSide));
+    } else if (MAP_TYPE === 'genus2') {
+      markMaterialFront = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTex[face.key], THREE.DoubleSide));
+      markMaterialBack = null;
     } else {
       markMaterialFront = createMarkMaterial(markTexFront, THREE.FrontSide);
       markMaterialBack = createMarkMaterial(markTexBack, THREE.BackSide);
@@ -266,7 +269,11 @@ function ensureSurfaceGeometry() {
   torusMesh.position.set(0, 0, 0);
   scene.add(torusMesh);
 
-  if (MAP_TYPE !== 'genus2') {
+  if (MAP_TYPE === 'genus2') {
+    markMeshFront = new THREE.Mesh(geo, markMaterialFront);
+    markMeshFront.renderOrder = 2;
+    scene.add(markMeshFront);
+  } else {
     markMeshFront = new THREE.Mesh(geo, markMaterialFront);
     markMeshBack = new THREE.Mesh(geo, markMaterialBack);
     markMeshFront.renderOrder = 2;
@@ -404,7 +411,7 @@ const GENUS2_CENTER_OFFSET = 0.58;
 const GENUS2_RING_R = 0.58;
 const GENUS2_TUBE_R = 0.27;
 const GENUS2_SMOOTH = 0.18;
-const GENUS2_PATCH_CELLS = 8;
+const GENUS2_PATCH_CELLS = 6;
 const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS * 2;
 const GENUS2_POLYCUBE_SCALE = { x: 0.58, y: 0.55, z: 0.54 };
 
@@ -648,6 +655,12 @@ function createGenus2Geometry() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  let groupStart = 0;
+  const verticesPerFace = GENUS2_PATCH_RENDER_SEGMENTS * GENUS2_PATCH_RENDER_SEGMENTS * 6;
+  for (let i = 0; i < topology.faces.length; i++) {
+    geo.addGroup(groupStart, verticesPerFace, i);
+    groupStart += verticesPerFace;
+  }
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   return geo;
@@ -739,9 +752,6 @@ const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 scene.fog = new THREE.Fog(0x1a1a2e, 4, 12);
-const genus2MarkerGroup = new THREE.Group();
-genus2MarkerGroup.renderOrder = 3;
-scene.add(genus2MarkerGroup);
 
 const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
 camera.position.set(3.5, 2.8, 5.5);
@@ -812,6 +822,9 @@ const sphereMarkCtxFront = {};
 const sphereMarkCtxBack = {};
 const sphereMarkTexFront = {};
 const sphereMarkTexBack = {};
+const GENUS2_FACE_TEX_SIZE = 192;
+const genus2MarkCtx = {};
+const genus2MarkTex = {};
 
 for (const faceKey of CUBE_FACE_KEYS) {
   const frontCanvas = document.createElement('canvas');
@@ -829,6 +842,16 @@ for (const faceKey of CUBE_FACE_KEYS) {
   sphereMarkTexBack[faceKey].flipY = false;
 }
 
+for (const face of getGenus2Topology().faces) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = GENUS2_FACE_TEX_SIZE;
+  genus2MarkCtx[face.key] = canvas.getContext('2d');
+  genus2MarkTex[face.key] = new THREE.CanvasTexture(canvas);
+  genus2MarkTex[face.key].wrapS = genus2MarkTex[face.key].wrapT = THREE.ClampToEdgeWrapping;
+  genus2MarkTex[face.key].colorSpace = THREE.SRGBColorSpace;
+  genus2MarkTex[face.key].flipY = false;
+}
+
 function createMarkMaterial(map, side) {
   return new THREE.MeshBasicMaterial({
     map,
@@ -842,22 +865,9 @@ function createMarkMaterial(map, side) {
   });
 }
 
-const genus2MarkerMaterials = {
-  head: new THREE.MeshBasicMaterial({ color: 0xffdd57, side: THREE.DoubleSide, depthWrite: false }),
-  body: new THREE.MeshBasicMaterial({ color: 0xff8c42, side: THREE.DoubleSide, depthWrite: false }),
-  food: {},
-};
-for (const [key, def] of Object.entries(FOOD_DEF)) {
-  genus2MarkerMaterials.food[key] = new THREE.MeshBasicMaterial({
-    color: def.color,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-}
-
 function textureCellPx() {
   if (MAP_TYPE === 'sphere') return SPHERE_FACE_TEX_SIZE / GRID_SIZE;
-  if (MAP_TYPE === 'genus2') return TEX_SIZE / GENUS2_PATCH_CELLS;
+  if (MAP_TYPE === 'genus2') return GENUS2_FACE_TEX_SIZE / GENUS2_PATCH_CELLS;
   return TEX_SIZE / GRID_SIZE;
 }
 
@@ -865,11 +875,16 @@ function markContextFor(item) {
   if (MAP_TYPE === 'sphere') {
     return sphereMarkCtxFront[item.face || 'F'];
   }
+  if (MAP_TYPE === 'genus2') {
+    return genus2MarkCtx[item.face || genus2StartFaceKey()];
+  }
   return item.side === -1 ? markCtxBack : markCtxFront;
 }
 
 function cellCenter(gx, gy, face = 'F') {
-  const size = MAP_TYPE === 'sphere' ? SPHERE_FACE_TEX_SIZE : TEX_SIZE;
+  const size = MAP_TYPE === 'sphere'
+    ? SPHERE_FACE_TEX_SIZE
+    : (MAP_TYPE === 'genus2' ? GENUS2_FACE_TEX_SIZE : TEX_SIZE);
   const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
   const px = size / gridSize;
   return {
@@ -942,63 +957,6 @@ function drawSurfaceGrid(ctx, size) {
   }
 }
 
-function clearGenus2Markers() {
-  while (genus2MarkerGroup.children.length > 0) {
-    const child = genus2MarkerGroup.children[genus2MarkerGroup.children.length - 1];
-    genus2MarkerGroup.remove(child);
-    child.geometry.dispose();
-  }
-}
-
-function createGenus2CellMarkerGeometry(item, inset = 0.14, lift = 0.018) {
-  const face = item.face || genus2StartFaceKey();
-  const n = GENUS2_PATCH_CELLS;
-  const u0 = (item.gx + inset) / n;
-  const u1 = (item.gx + 1 - inset) / n;
-  const v0 = (item.gy + inset) / n;
-  const v1 = (item.gy + 1 - inset) / n;
-  const p00 = genus2SurfacePoint(face, u0, v0, lift);
-  const p10 = genus2SurfacePoint(face, u1, v0, lift);
-  const p01 = genus2SurfacePoint(face, u0, v1, lift);
-  const p11 = genus2SurfacePoint(face, u1, v1, lift);
-  const positions = [];
-
-  function pushTriangle(a, b, c) {
-    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3);
-    const outward = estimateGenus2Normal(center.x, center.y, center.z);
-    const winding = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
-    const verts = winding.dot(outward) < 0 ? [a, c, b] : [a, b, c];
-    for (const p of verts) positions.push(p.x, p.y, p.z);
-  }
-
-  pushTriangle(p00, p10, p01);
-  pushTriangle(p10, p11, p01);
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.computeVertexNormals();
-  return geo;
-}
-
-function redrawGenus2Markers() {
-  clearGenus2Markers();
-
-  for (const f of foods) {
-    const material = genus2MarkerMaterials.food[f.type] || genus2MarkerMaterials.food.grow;
-    const mesh = new THREE.Mesh(createGenus2CellMarkerGeometry(f, 0.22, 0.024), material);
-    mesh.renderOrder = 3;
-    genus2MarkerGroup.add(mesh);
-  }
-
-  for (let i = snake.length - 1; i >= 0; i--) {
-    const s = snake[i];
-    const material = i === 0 ? genus2MarkerMaterials.head : genus2MarkerMaterials.body;
-    const mesh = new THREE.Mesh(createGenus2CellMarkerGeometry(s, i === 0 ? 0.10 : 0.16, 0.028), material);
-    mesh.renderOrder = 4;
-    genus2MarkerGroup.add(mesh);
-  }
-}
-
 function redrawTexture() {
   const ctx = texCtx;
   const size = TEX_SIZE;
@@ -1015,18 +973,16 @@ function redrawTexture() {
     sphereMarkCtxFront[faceKey].clearRect(0, 0, SPHERE_FACE_TEX_SIZE, SPHERE_FACE_TEX_SIZE);
     sphereMarkCtxBack[faceKey].clearRect(0, 0, SPHERE_FACE_TEX_SIZE, SPHERE_FACE_TEX_SIZE);
   }
+  for (const face of getGenus2Topology().faces) {
+    genus2MarkCtx[face.key].clearRect(0, 0, GENUS2_FACE_TEX_SIZE, GENUS2_FACE_TEX_SIZE);
+  }
 
-  if (MAP_TYPE === 'genus2') {
-    redrawGenus2Markers();
-  } else {
-    clearGenus2Markers();
-    for (const f of foods) {
-      drawFoodMark(markContextFor(f), f);
-    }
+  for (const f of foods) {
+    drawFoodMark(markContextFor(f), f);
+  }
 
-    for (let i = snake.length - 1; i >= 0; i--) {
-      drawSnakeMark(markContextFor(snake[i]), snake[i], i);
-    }
+  for (let i = snake.length - 1; i >= 0; i--) {
+    drawSnakeMark(markContextFor(snake[i]), snake[i], i);
   }
 
   gridTex.needsUpdate = true;
@@ -1035,6 +991,9 @@ function redrawTexture() {
   for (const faceKey of CUBE_FACE_KEYS) {
     sphereMarkTexFront[faceKey].needsUpdate = true;
     sphereMarkTexBack[faceKey].needsUpdate = true;
+  }
+  for (const face of getGenus2Topology().faces) {
+    genus2MarkTex[face.key].needsUpdate = true;
   }
 }
 
