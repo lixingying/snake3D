@@ -8,7 +8,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     overflow: hidden;
-    background: #1a1a2e;
+    background: #07090f;
     font-family: 'Courier New', monospace;
     color: #eee;
     user-select: none;
@@ -34,7 +34,7 @@
     gap: 20px;
     flex-wrap: wrap;
     font-size: 0.95rem;
-    background: rgba(26, 26, 46, 0.85);
+    background: rgba(9, 12, 20, 0.86);
     padding: 8px 16px;
     border-radius: 6px;
     align-self: center;
@@ -85,7 +85,7 @@
     flex-wrap: wrap;
     justify-content: center;
     line-height: 1.5;
-    background: rgba(26, 26, 46, 0.75);
+    background: rgba(9, 12, 20, 0.78);
     padding: 6px 12px;
     border-radius: 4px;
   }
@@ -99,7 +99,7 @@
   .legend .sepa { color: #444; margin: 0 2px; font-weight: bold; }
   .tip {
     font-size: 0.75rem;
-    color: #666;
+    color: #7f8da3;
     text-align: center;
   }
   .pause-overlay {
@@ -120,7 +120,7 @@
     top: 50%;
     transform: translateY(-50%);
     z-index: 3;
-    background: rgba(26, 26, 46, 0.93);
+    background: rgba(9, 12, 20, 0.94);
     border: 2px solid #4ecca3;
     border-radius: 8px;
     padding: 5px;
@@ -187,7 +187,7 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 
 /* ===========================
    CONSTANTS
@@ -784,8 +784,8 @@ function createKleinGeometry() {
    =========================== */
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
-scene.fog = new THREE.Fog(0x1a1a2e, 4, 12);
+scene.background = new THREE.Color(0x07090f);
+scene.fog = new THREE.Fog(0x07090f, 5.5, 13);
 
 const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
 camera.position.set(3.5, 2.8, 5.5);
@@ -798,20 +798,22 @@ renderer.shadowMap.enabled = true;
 container.appendChild(renderer.domElement);
 
 // Lights
-const ambient = new THREE.AmbientLight(0x334466, 1.8);
+const ambient = new THREE.AmbientLight(0x8aa2c8, 1.15);
 scene.add(ambient);
 const key = new THREE.DirectionalLight(0xffffff, 2.5);
 key.position.set(5, 8, 5);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x4ecca3, 1.2);
+const rim = new THREE.DirectionalLight(0x7ee0c2, 1.45);
 rim.position.set(-3, -1, -3);
 scene.add(rim);
 
-// Orbit controls
-const controls = new OrbitControls(camera, renderer.domElement);
+// Trackball controls allow full free rotation without polar-angle dead ends.
+const controls = new TrackballControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
+controls.rotateSpeed = 2.6;
+controls.zoomSpeed = 1.2;
+controls.panSpeed = 0.35;
+controls.dynamicDampingFactor = 0.12;
 controls.minDistance = 2.5;
 controls.maxDistance = 8;
 controls.update();
@@ -821,6 +823,7 @@ window.addEventListener('resize', () => {
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
+  if (controls.handleResize) controls.handleResize();
 });
 
 /* ===========================
@@ -964,7 +967,7 @@ function drawSnakeMark(ctx, s, i) {
     const cx = center.x;
     const cy = center.y;
     const er = px * 0.10;
-    ctx.fillStyle = '#1a1a2e';
+    ctx.fillStyle = '#061018';
     let ex1, ey1, ex2, ey2;
     if (dir.dx === 1)      { ex1 = cx + px*0.18; ey1 = cy - px*0.18; ex2 = cx + px*0.18; ey2 = cy + px*0.18; }
     else if (dir.dx === -1) { ex1 = cx - px*0.18; ey1 = cy - px*0.18; ex2 = cx - px*0.18; ey2 = cy + px*0.18; }
@@ -981,7 +984,7 @@ function drawSnakeMark(ctx, s, i) {
 
 function drawSurfaceGrid(ctx, size) {
   if (MAP_TYPE === 'projective') {
-    ctx.strokeStyle = 'rgba(78,204,163,0.07)';
+    ctx.strokeStyle = 'rgba(168,228,210,0.11)';
     ctx.lineWidth = 1;
     const px = size / GRID_SIZE;
     for (let i = 1; i < GRID_SIZE; i++) {
@@ -991,7 +994,7 @@ function drawSurfaceGrid(ctx, size) {
     }
     return;
   }
-  ctx.strokeStyle = 'rgba(78,204,163,0.2)';
+  ctx.strokeStyle = 'rgba(168,228,210,0.26)';
   ctx.lineWidth = 1;
   const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
   const px = size / gridSize;
@@ -1007,7 +1010,7 @@ function redrawTexture() {
   const size = TEX_SIZE;
 
   // Background
-  ctx.fillStyle = '#16213e';
+  ctx.fillStyle = '#24384a';
   ctx.fillRect(0, 0, size, size);
 
   drawSurfaceGrid(ctx, size);
@@ -1718,11 +1721,11 @@ function drawMiniMap() {
   const dir = chartDisplayDir;
 
   // Background
-  ctx.fillStyle = '#16213e';
+  ctx.fillStyle = '#223447';
   ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
 
   // Grid
-  ctx.strokeStyle = 'rgba(78,204,163,0.25)';
+  ctx.strokeStyle = 'rgba(168,228,210,0.32)';
   ctx.lineWidth = 1;
   for (let i = 0; i <= MAP_CELLS; i++) {
     const p = i * MAP_PX;
@@ -1783,7 +1786,7 @@ function drawMiniMap() {
       ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
       // Eyes
       const er = MAP_PX * 0.10;
-      ctx.fillStyle = '#1a1a2e';
+      ctx.fillStyle = '#061018';
       let ex1, ey1, ex2, ey2;
       if (dir.dx === 1)       { ex1 = m.cx + MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
       else if (dir.dx === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx - MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
@@ -1807,7 +1810,7 @@ function drawMiniMap() {
   // Direction arrow on head
   const acx = MAP_HALF * MAP_PX + MAP_PX / 2;
   const acy = MAP_HALF * MAP_PX + MAP_PX / 2;
-  ctx.fillStyle = '#1a1a2e';
+  ctx.fillStyle = '#061018';
   ctx.beginPath();
   const alen = MAP_PX * 0.3;
   const ax = acx + dir.dx * alen;
