@@ -193,7 +193,7 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
    CONSTANTS
    =========================== */
 const GRID_SIZE = 20;
-const INITIAL_SNAKE_LENGTH = 3;
+const INITIAL_SNAKE_LENGTH = 100;
 const SPAWN_INTERVAL = 35;
 const FOOD_LIFETIME = 160;
 const MAX_FOODS = 7;
@@ -224,6 +224,7 @@ const CUT_COLORS = {
   c: '#7cff6b',
   d: '#ffd166',
 };
+const GENUS2_CUT_BASE_CELLS = 6;
 const GENUS2_CUT_DEFS = [
   { label: 'a', face: 'G2_0_0_0_PX', gx: 0, gy: 0, edge: 'R' },
   { label: 'b', face: 'G2_2_0_0_NX', gx: 0, gy: 4, edge: 'D' },
@@ -443,7 +444,7 @@ const GENUS2_RING_R = 0.58;
 const GENUS2_TUBE_R = 0.27;
 const GENUS2_SMOOTH = 0.18;
 const GENUS2_PATCH_CELLS = 6;
-const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS * 2;
+const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS;
 const GENUS2_POLYCUBE_SCALE = { x: 0.58, y: 0.55, z: 0.54 };
 
 function smoothMin(a, b, k) {
@@ -746,14 +747,29 @@ function genus2RootPath(parent, root, vertex) {
 }
 
 let genus2CutSchemaCache = null;
+function scaleGenus2CutDef(def) {
+  const scale = GENUS2_PATCH_CELLS / GENUS2_CUT_BASE_CELLS;
+  const x0 = Math.round(def.gx * scale);
+  const y0 = Math.round(def.gy * scale);
+  const x1 = Math.round((def.gx + 1) * scale);
+  const y1 = Math.round((def.gy + 1) * scale);
+
+  if (def.edge === 'R') return { ...def, gx: clampGenus2Cell(x1 - 1), gy: clampGenus2Cell(y0) };
+  if (def.edge === 'D') return { ...def, gx: clampGenus2Cell(x0), gy: clampGenus2Cell(y1 - 1) };
+  return { ...def, gx: clampGenus2Cell(x0), gy: clampGenus2Cell(y0) };
+}
+
 function getGenus2CutSchema() {
   if (!genus2CutSchemaCache) {
-    const cuts = GENUS2_CUT_DEFS.map(def => ({
-      ...def,
-      color: CUT_COLORS[def.label],
-      cellId: `${def.face}|${def.gx}|${def.gy}`,
-      edgeKey: genus2GridEdgeKey(def.face, def.gx, def.gy, def.edge),
-    }));
+    const cuts = GENUS2_CUT_DEFS.map(def => {
+      const scaled = scaleGenus2CutDef(def);
+      return {
+        ...scaled,
+        color: CUT_COLORS[scaled.label],
+        cellId: `${scaled.face}|${scaled.gx}|${scaled.gy}`,
+        edgeKey: genus2GridEdgeKey(scaled.face, scaled.gx, scaled.gy, scaled.edge),
+      };
+    });
     const graph = buildGenus2GridGraph();
     const loops = cuts.map(cut => {
       const edge = graph.edges.get(cut.edgeKey);
