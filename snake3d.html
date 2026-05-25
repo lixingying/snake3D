@@ -1374,6 +1374,10 @@ function updateUI() {
   document.getElementById('pauseBtn').textContent = paused ? '继续' : '暂停';
 }
 
+function sameSnakeCell(a, gx, gy, side, face) {
+  return a.gx === gx && a.gy === gy && sameSurfaceSide(a.side, side) && sameSurfaceFace(a.face, face);
+}
+
 function togglePause() {
   if (!running) return;
   paused = !paused;
@@ -1420,7 +1424,7 @@ function sameSurfaceFace(a, b) {
 }
 
 function isOccupied(gx, gy, side = 1, face = null) {
-  if (snake.some(s => s.gx === gx && s.gy === gy && sameSurfaceSide(s.side, side) && sameSurfaceFace(s.face, face))) return true;
+  if (snake.some(s => sameSnakeCell(s, gx, gy, side, face))) return true;
   if (foods.some(f => f.gx === gx && f.gy === gy && sameSurfaceSide(f.side, side) && sameSurfaceFace(f.face, face))) return true;
   return false;
 }
@@ -1564,9 +1568,14 @@ function gameTick() {
   nextDir = { ...direction };
   chartMirror *= next.mirror ?? 1;
 
-  // Self collision
-  if (snake.some(s => s.gx === newGx && s.gy === newGy && sameSurfaceSide(s.side, newSide) && sameSurfaceFace(s.face, newFace))) {
-    die();
+  const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
+  if (hitSelfIdx !== -1) {
+    snake = [
+      { gx: newGx, gy: newGy, side: newSide, face: newFace },
+      ...snake.slice(0, hitSelfIdx),
+    ];
+    addMsg('撞断身体！保留前 ' + snake.length + ' 节', 'warn');
+    updateUI();
     return;
   }
 
