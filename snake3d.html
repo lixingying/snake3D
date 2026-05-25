@@ -133,6 +133,40 @@
     letter-spacing: 1px;
     margin-top: 1px;
   }
+  #pi1-panel {
+    position: fixed;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    width: 310px;
+    background: rgba(9, 12, 20, 0.94);
+    border: 2px solid #5dade2;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.68rem;
+    line-height: 1.45;
+    color: #d7e8f4;
+    pointer-events: none;
+  }
+  #pi1-panel .pi1-title {
+    color: #5dade2;
+    text-align: center;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  #pi1-panel .pi1-row {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 6px;
+    align-items: start;
+  }
+  #pi1-panel .pi1-key { color: #7f8da3; }
+  #pi1-panel .pi1-val {
+    color: #f5fbff;
+    overflow-wrap: anywhere;
+  }
+  #pi1-panel .pi1-warn { color: #f0a500; }
 </style>
 <script type="importmap">
 {
@@ -185,6 +219,19 @@
   <div class="map-title">局部地图</div>
 </div>
 
+<div id="pi1-panel" style="display:none;">
+  <div class="pi1-title">π1 计算</div>
+  <div class="pi1-row"><span class="pi1-key">关系</span><span class="pi1-val" id="pi1Rel">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">上一步</span><span class="pi1-val" id="pi1Step">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">dx,dy</span><span class="pi1-val" id="pi1Move">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">tx,ty</span><span class="pi1-val" id="pi1Cut">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">det</span><span class="pi1-val" id="pi1Det">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">头词</span><span class="pi1-val" id="pi1Head">1</span></div>
+  <div class="pi1-row"><span class="pi1-key">尾词</span><span class="pi1-val" id="pi1Tail">1</span></div>
+  <div class="pi1-row"><span class="pi1-key">体词</span><span class="pi1-val" id="pi1Body">1</span></div>
+  <div class="pi1-row"><span class="pi1-key">闭合</span><span class="pi1-val" id="pi1Close">-</span></div>
+</div>
+
 <script type="module">
 import * as THREE from 'three';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
@@ -224,7 +271,7 @@ const CUT_COLORS = {
   c: '#7cff6b',
   d: '#ffd166',
 };
-const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'b', 'd', 'B', 'D'];
+const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'd', 'b', 'D', 'B'];
 
 /* ===========================
    TORUS MESH
@@ -1653,6 +1700,7 @@ function createCutOverlayGroup() {
    =========================== */
 let snake = [];
 let direction, nextDir, chartDisplayDir, chartMirror;
+let pi1LastStep = null;
 
 function wrapGrid(v) {
   return ((v % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
@@ -1944,14 +1992,30 @@ function genus2MoveEdgeKey(from, moveDir) {
   );
 }
 
-function genus2StepWord(from, moveDir) {
+function genus2StepCrossingCandidates(from, moveDir) {
   const edgeKey = genus2MoveEdgeKey(from, moveDir);
   const cuts = getGenus2CutSchema().byEdgeKey.get(edgeKey);
-  if (!cuts || cuts.length === 0) return [];
   const face = from.face || genus2StartFaceKey();
-  const cut = cuts.find(candidate => candidate.face === face) || cuts[0];
-  const crossing = cut.tx * moveDir.dy - cut.ty * moveDir.dx;
-  return crossing >= 0 ? [cut.label] : [cut.label.toUpperCase()];
+  return (cuts || []).map(cut => {
+    const det = cut.tx * moveDir.dy - cut.ty * moveDir.dx;
+    return {
+      cut,
+      det,
+      letter: det >= 0 ? cut.label : cut.label.toUpperCase(),
+      sameFace: cut.face === face,
+    };
+  });
+}
+
+function genus2SelectedStepCrossing(from, moveDir) {
+  const candidates = genus2StepCrossingCandidates(from, moveDir);
+  if (candidates.length === 0) return null;
+  return candidates.find(candidate => candidate.sameFace) || candidates[0];
+}
+
+function genus2StepWord(from, moveDir) {
+  const crossing = genus2SelectedStepCrossing(from, moveDir);
+  return crossing ? [crossing.letter] : [];
 }
 
 function advanceTopologyState(state, from, moveDir) {
@@ -2016,6 +2080,103 @@ function loopWordLabel(word) {
   return word.length > 0 ? word.join('') : '1';
 }
 
+function wordFormula(word) {
+  return word && word.length > 0 ? word.join('') : '1';
+}
+
+function setPi1Text(id, text, warn = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'pi1-val' + (warn ? ' pi1-warn' : '');
+}
+
+function describeGenus2Move(from, moveDir) {
+  const candidates = genus2StepCrossingCandidates(from, moveDir);
+  const selected = genus2SelectedStepCrossing(from, moveDir);
+  const face = from.face || genus2StartFaceKey();
+  if (!selected) {
+    return {
+      step: '未穿过 cut',
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const candidateText = candidates.length > 1
+    ? `候选 ${candidates.map(c => c.letter).join(',')}；采用 ${selected.letter}`
+    : `cut ${selected.cut.label} -> ${selected.letter}`;
+  return {
+    step: `${candidateText} @ ${face}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: `(${selected.cut.tx}, ${selected.cut.ty})`,
+    det: `${selected.cut.tx}*${moveDir.dy} - ${selected.cut.ty}*${moveDir.dx} = ${selected.det}`,
+  };
+}
+
+function updatePi1Panel() {
+  const panel = document.getElementById('pi1-panel');
+  if (!panel) return;
+  if (MAP_TYPE !== 'genus2') {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  setPi1Text('pi1Rel', `${GENUS2_RELATOR.join('')} = 1`);
+
+  const head = snake[0];
+  const tail = snake[snake.length - 1];
+  if (!head || !tail) return;
+
+  const last = pi1LastStep || {
+    step: '尚未移动',
+    move: '-',
+    cut: '-',
+    det: '-',
+  };
+  setPi1Text('pi1Step', last.step, last.step.includes('候选'));
+  setPi1Text('pi1Move', last.move);
+  setPi1Text('pi1Cut', last.cut);
+  setPi1Text('pi1Det', last.det);
+  setPi1Text('pi1Head', wordFormula(head.topo?.word));
+  setPi1Text('pi1Tail', wordFormula(tail.topo?.word));
+
+  const bodyWord = reduceGenus2Word([
+    ...invertWord(tail.topo?.word || []),
+    ...(head.topo?.word || []),
+  ]);
+  setPi1Text('pi1Body', `T^-1 H = ${wordFormula(bodyWord)}`);
+
+  const dir = nextDir || direction;
+  if (!dir) {
+    setPi1Text('pi1Close', '-');
+    return;
+  }
+  const next = normalizeGridPosition(head.gx + dir.dx, head.gy + dir.dy, dir, head.side, head.face);
+  if (
+    next.blocked ||
+    next.gx !== tail.gx ||
+    next.gy !== tail.gy ||
+    !sameSurfaceSide(next.side, tail.side) ||
+    !sameSurfaceFace(next.face, tail.face)
+  ) {
+    setPi1Text('pi1Close', '下一步未闭合');
+    return;
+  }
+
+  const newTopo = advanceTopologyState(head.topo, head, dir);
+  const rawLoopWord = [
+    ...invertWord(tail.topo?.word || []),
+    ...((newTopo && newTopo.word) || []),
+  ];
+  const loopWord = reduceGenus2Word(rawLoopWord);
+  setPi1Text(
+    'pi1Close',
+    `T^-1 H' = ${wordFormula(rawLoopWord)} -> ${wordFormula(loopWord)} (${loopWord.length > 0 ? '非平凡' : '平凡'})`,
+    loopWord.length === 0,
+  );
+}
+
 function genus2ClosureInfo(newTopo) {
   const tailTopo = cloneTopologyState(snake[snake.length - 1].topo);
   const word = reduceGenus2Word([
@@ -2076,6 +2237,7 @@ function buildInitialSnake(head, length) {
 }
 
 function resetSnake() {
+  pi1LastStep = null;
   if (MAP_TYPE === 'genus2') {
     const face = genus2StartFaceKey();
     const gy = Math.floor(GENUS2_PATCH_CELLS / 2);
@@ -2345,6 +2507,9 @@ function gameTick() {
     face: newFace,
     topo: advanceTopologyState(head.topo, head, moveDir),
   };
+  if (MAP_TYPE === 'genus2') {
+    pi1LastStep = describeGenus2Move(head, moveDir);
+  }
 
   const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
   if (hitSelfIdx !== -1) {
@@ -2627,6 +2792,7 @@ function render() {
 
   redrawTexture();
   drawMiniMap();
+  updatePi1Panel();
   controls.update();
   renderer.render(scene, camera);
 }
