@@ -772,6 +772,7 @@ function getGenus2CutSchema() {
     });
     genus2CutSchemaCache = {
       cuts,
+      graph,
       loops,
       byEdgeKey: new Map(cuts.map(cut => [cut.edgeKey, cut])),
     };
@@ -1741,13 +1742,21 @@ function moveDirToEdge(moveDir) {
   return 'U';
 }
 
+function genus2MoveEdgeKey(from, moveDir) {
+  return genus2GridEdgeKey(
+    from.face || genus2StartFaceKey(),
+    from.gx,
+    from.gy,
+    moveDirToEdge(moveDir),
+  );
+}
+
 function genus2StepWord(from, moveDir) {
-  const face = from.face || genus2StartFaceKey();
   const edge = moveDirToEdge(moveDir);
-  const edgeKey = genus2GridEdgeKey(face, from.gx, from.gy, edge);
+  const edgeKey = genus2MoveEdgeKey(from, moveDir);
   const cut = getGenus2CutSchema().byEdgeKey.get(edgeKey);
   if (!cut) return [];
-  const fromCellId = `${face}|${from.gx}|${from.gy}`;
+  const fromCellId = `${from.face || genus2StartFaceKey()}|${from.gx}|${from.gy}`;
   return fromCellId === cut.cellId && edge === cut.edge
     ? [cut.label]
     : [cut.label.toUpperCase()];
@@ -1815,7 +1824,72 @@ function loopWordLabel(word) {
   return word.length > 0 ? word.join('') : '1';
 }
 
-function tailClosureInfo(newTopo) {
+function toggleParity(set, key) {
+  if (set.has(key)) set.delete(key);
+  else set.add(key);
+}
+
+function genus2LoopEdgeParity(closingMoveDir) {
+  const parity = new Set();
+  for (let i = snake.length - 1; i > 0; i--) {
+    const dir = inferStepDirection(snake[i], snake[i - 1]);
+    if (!dir) return null;
+    toggleParity(parity, genus2MoveEdgeKey(snake[i], dir));
+  }
+  toggleParity(parity, genus2MoveEdgeKey(snake[0], closingMoveDir));
+  return parity;
+}
+
+function genus2HomologyIsNonzero(edgeParity) {
+  if (!edgeParity || edgeParity.size === 0) return false;
+  const graph = getGenus2CutSchema().graph;
+  const values = new Map();
+
+  for (const start of graph.vertices.keys()) {
+    if (values.has(start)) continue;
+    values.set(start, 0);
+    const queue = [start];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const currentValue = values.get(current);
+      for (const edgeKey of graph.vertices.get(current).edges) {
+        const edge = graph.edges.get(edgeKey);
+        const next = edge.a === current ? edge.b : edge.a;
+        const required = currentValue ^ (edgeParity.has(edgeKey) ? 1 : 0);
+        if (!values.has(next)) {
+          values.set(next, required);
+          queue.push(next);
+        } else if (values.get(next) !== required) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function genus2ClosureInfo(newTopo, closingMoveDir) {
+  const edgeParity = genus2LoopEdgeParity(closingMoveDir);
+  if (genus2HomologyIsNonzero(edgeParity)) {
+    return {
+      nontrivial: true,
+      label: 'H1 非零',
+    };
+  }
+
+  const tailTopo = cloneTopologyState(snake[snake.length - 1].topo);
+  const word = reduceGenus2Word([
+    ...invertWord(tailTopo.word || []),
+    ...((newTopo && newTopo.word) || []),
+  ]);
+  return {
+    nontrivial: word.length > 0,
+    label: loopWordLabel(word),
+  };
+}
+
+function tailClosureInfo(newTopo, closingMoveDir) {
   if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return null;
   const tailTopo = cloneTopologyState(snake[snake.length - 1].topo);
   if (MAP_TYPE === 'torus') {
@@ -1830,14 +1904,7 @@ function tailClosureInfo(newTopo) {
     };
   }
   if (MAP_TYPE === 'genus2') {
-    const word = reduceGenus2Word([
-      ...invertWord(tailTopo.word || []),
-      ...((newTopo && newTopo.word) || []),
-    ]);
-    return {
-      nontrivial: word.length > 0,
-      label: loopWordLabel(word),
-    };
+    return genus2ClosureInfo(newTopo, closingMoveDir);
   }
   return null;
 }
@@ -2143,7 +2210,7 @@ function gameTick() {
   const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
   if (hitSelfIdx !== -1) {
     const isTailClosure = LOOP_WIN_MAPS.has(MAP_TYPE) && hitSelfIdx === snake.length - 1;
-    const closure = isTailClosure ? tailClosureInfo(newHead.topo) : null;
+    const closure = isTailClosure ? tailClosureInfo(newHead.topo, moveDir) : null;
     if (closure?.nontrivial) {
       snake.unshift(newHead);
       winByLoop(closure);
