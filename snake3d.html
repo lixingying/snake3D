@@ -224,14 +224,7 @@ const CUT_COLORS = {
   c: '#7cff6b',
   d: '#ffd166',
 };
-const GENUS2_CUT_BASE_CELLS = 6;
-const GENUS2_CUT_DEFS = [
-  { label: 'a', face: 'G2_0_0_0_PX', gx: 0, gy: 0, edge: 'R' },
-  { label: 'b', face: 'G2_2_0_0_NX', gx: 0, gy: 4, edge: 'D' },
-  { label: 'c', face: 'G2_-1_1_0_NY', gx: 2, gy: 4, edge: 'D' },
-  { label: 'd', face: 'G2_2_1_0_PX', gx: 1, gy: 0, edge: 'R' },
-];
-const GENUS2_RELATOR = ['a', 'B', 'A', 'd', 'b', 'c', 'D', 'C'];
+const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'b', 'd', 'B', 'D'];
 
 /* ===========================
    TORUS MESH
@@ -446,6 +439,7 @@ const GENUS2_SMOOTH = 0.18;
 const GENUS2_PATCH_CELLS = 6;
 const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS;
 const GENUS2_POLYCUBE_SCALE = { x: 0.58, y: 0.55, z: 0.54 };
+const GENUS2_BASE_FACE = 'G2_0_0_0_PZ';
 
 function smoothMin(a, b, k) {
   const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k));
@@ -747,50 +741,233 @@ function genus2RootPath(parent, root, vertex) {
 }
 
 let genus2CutSchemaCache = null;
-function scaleGenus2CutDef(def) {
-  const scale = GENUS2_PATCH_CELLS / GENUS2_CUT_BASE_CELLS;
-  const x0 = Math.round(def.gx * scale);
-  const y0 = Math.round(def.gy * scale);
-  const x1 = Math.round((def.gx + 1) * scale);
-  const y1 = Math.round((def.gy + 1) * scale);
+function genus2CutWaypoint(face, ix, iy) {
+  return { face, ix, iy };
+}
 
-  if (def.edge === 'R') return { ...def, gx: clampGenus2Cell(x1 - 1), gy: clampGenus2Cell(y0) };
-  if (def.edge === 'D') return { ...def, gx: clampGenus2Cell(x0), gy: clampGenus2Cell(y1 - 1) };
-  return { ...def, gx: clampGenus2Cell(x0), gy: clampGenus2Cell(y0) };
+function genus2CutPathDefs() {
+  const n = GENUS2_PATCH_CELLS;
+  const h = Math.floor(n / 2);
+  const base = GENUS2_BASE_FACE;
+  return [
+    {
+      label: 'a',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, 0, h),
+        genus2CutWaypoint(base, 0, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', n, n),
+        genus2CutWaypoint('G2_-1_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_-2_0_0_PZ', n, 0),
+        genus2CutWaypoint('G2_-2_0_0_PZ', n, n),
+        genus2CutWaypoint('G2_-1_-1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-1_-1_0_PZ', n, 0),
+        genus2CutWaypoint(base, 0, n),
+        genus2CutWaypoint(base, 0, h),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+    {
+      label: 'b',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, n, h),
+        genus2CutWaypoint(base, n, 0),
+        genus2CutWaypoint('G2_1_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_1_1_0_PZ', n, n),
+        genus2CutWaypoint('G2_2_0_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_2_0_0_PZ', 0, n),
+        genus2CutWaypoint('G2_1_-1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_1_-1_0_PZ', 0, 0),
+        genus2CutWaypoint(base, n, n),
+        genus2CutWaypoint(base, n, h),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+    {
+      label: 'c',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, 0, h),
+        genus2CutWaypoint('G2_0_0_0_NX', h, 0),
+        genus2CutWaypoint('G2_0_0_0_NX', h, n),
+        genus2CutWaypoint('G2_0_0_0_NZ', 0, h),
+        genus2CutWaypoint('G2_0_0_0_NZ', 0, 0),
+        genus2CutWaypoint('G2_-1_-1_0_NZ', n, n),
+        genus2CutWaypoint('G2_-1_-1_0_NZ', 0, n),
+        genus2CutWaypoint('G2_-2_0_0_NZ', n, 0),
+        genus2CutWaypoint('G2_-2_0_0_NZ', n, h),
+        genus2CutWaypoint('G2_-2_0_0_NZ', 0, h),
+        genus2CutWaypoint('G2_-2_0_0_NX', h, n),
+        genus2CutWaypoint('G2_-2_0_0_NX', h, 0),
+        genus2CutWaypoint('G2_-2_0_0_PZ', 0, h),
+        genus2CutWaypoint('G2_-2_0_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-2_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_-2_1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-2_1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_0_1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_0_1_0_PZ', h, 0),
+        genus2CutWaypoint('G2_0_1_0_PZ', h, n),
+        genus2CutWaypoint(base, h, 0),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+    {
+      label: 'd',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, n, h),
+        genus2CutWaypoint('G2_0_0_0_PX', h, 0),
+        genus2CutWaypoint('G2_0_0_0_PX', h, n),
+        genus2CutWaypoint('G2_0_0_0_NZ', n, h),
+        genus2CutWaypoint('G2_0_0_0_NZ', n, 0),
+        genus2CutWaypoint('G2_1_-1_0_NZ', 0, n),
+        genus2CutWaypoint('G2_1_-1_0_NZ', n, n),
+        genus2CutWaypoint('G2_2_0_0_NZ', 0, 0),
+        genus2CutWaypoint('G2_2_0_0_NZ', 0, h),
+        genus2CutWaypoint('G2_2_0_0_NZ', n, h),
+        genus2CutWaypoint('G2_2_0_0_PX', h, n),
+        genus2CutWaypoint('G2_2_0_0_PX', h, 0),
+        genus2CutWaypoint('G2_2_0_0_PZ', n, h),
+        genus2CutWaypoint('G2_2_0_0_PZ', n, n),
+        genus2CutWaypoint('G2_2_-1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_2_-1_0_PZ', n, n),
+        genus2CutWaypoint('G2_2_-1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_1_-1_0_PZ', n, n),
+        genus2CutWaypoint('G2_1_-1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_0_-1_0_PZ', n, n),
+        genus2CutWaypoint('G2_0_-1_0_PZ', h, n),
+        genus2CutWaypoint('G2_0_-1_0_PZ', h, 0),
+        genus2CutWaypoint(base, h, n),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+  ];
+}
+
+function genus2WaypointWithKey(vertex) {
+  return {
+    ...vertex,
+    key: genus2GridVertexKey(vertex.face, vertex.ix, vertex.iy),
+  };
+}
+
+function pushGenus2CutPoint(points, point) {
+  const last = points[points.length - 1];
+  if (!last || last.key !== point.key || (point.face && last.face !== point.face)) {
+    points.push(point);
+  }
+}
+
+function appendGenus2CutLine(points, face, from, to) {
+  let ix = from.ix;
+  let iy = from.iy;
+  const sx = Math.sign(to.ix - from.ix);
+  const sy = Math.sign(to.iy - from.iy);
+  while (ix !== to.ix) {
+    ix += sx;
+    pushGenus2CutPoint(points, genus2WaypointWithKey({ face, ix, iy }));
+  }
+  while (iy !== to.iy) {
+    iy += sy;
+    pushGenus2CutPoint(points, genus2WaypointWithKey({ face, ix, iy }));
+  }
+}
+
+function genus2ShortestVertexPath(graph, startKey, endKey) {
+  const parent = new Map([[startKey, null]]);
+  const queue = [startKey];
+  while (queue.length > 0 && !parent.has(endKey)) {
+    const current = queue.shift();
+    for (const edgeKey of graph.vertices.get(current)?.edges || []) {
+      const edge = graph.edges.get(edgeKey);
+      const next = edge.a === current ? edge.b : edge.a;
+      if (parent.has(next)) continue;
+      parent.set(next, current);
+      queue.push(next);
+    }
+  }
+  if (!parent.has(endKey)) return [startKey, endKey];
+
+  const path = [];
+  let current = endKey;
+  while (current !== null) {
+    path.push(current);
+    current = parent.get(current);
+  }
+  return path.reverse();
+}
+
+function appendGenus2CutSegment(points, graph, fromVertex, toVertex) {
+  const from = genus2WaypointWithKey(fromVertex);
+  const to = genus2WaypointWithKey(toVertex);
+  pushGenus2CutPoint(points, from);
+  if (from.key === to.key) return;
+
+  if (from.face === to.face) {
+    appendGenus2CutLine(points, from.face, from, to);
+    return;
+  }
+
+  const path = genus2ShortestVertexPath(graph, from.key, to.key);
+  for (let i = 1; i < path.length; i++) {
+    pushGenus2CutPoint(points, { face: null, ix: null, iy: null, key: path[i] });
+  }
+}
+
+function buildGenus2CutPoints(def, graph) {
+  const points = [];
+  for (let i = 0; i < def.vertices.length - 1; i++) {
+    appendGenus2CutSegment(points, graph, def.vertices[i], def.vertices[i + 1]);
+  }
+  return points;
+}
+
+function buildGenus2CutEdges(def, points) {
+  const cuts = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (a.key === b.key) continue;
+    cuts.push({
+      label: def.label,
+      color: CUT_COLORS[def.label],
+      edgeKey: gridEdgeKey(a.key, b.key),
+      face: a.face === b.face ? a.face : null,
+      tx: a.face === b.face ? b.ix - a.ix : 0,
+      ty: a.face === b.face ? b.iy - a.iy : 0,
+    });
+  }
+  return cuts;
 }
 
 function getGenus2CutSchema() {
   if (!genus2CutSchemaCache) {
-    const cuts = GENUS2_CUT_DEFS.map(def => {
-      const scaled = scaleGenus2CutDef(def);
-      return {
-        ...scaled,
-        color: CUT_COLORS[scaled.label],
-        cellId: `${scaled.face}|${scaled.gx}|${scaled.gy}`,
-        edgeKey: genus2GridEdgeKey(scaled.face, scaled.gx, scaled.gy, scaled.edge),
-      };
-    });
     const graph = buildGenus2GridGraph();
-    const loops = cuts.map(cut => {
-      const edge = graph.edges.get(cut.edgeKey);
-      const pathA = genus2RootPath(graph.parent, graph.root, edge.a);
-      const pathB = genus2RootPath(graph.parent, graph.root, edge.b);
-      const keys = [
-        ...pathA,
-        edge.b,
-        ...pathB.slice(0, -1).reverse(),
-      ];
+    const cuts = [];
+    const loops = genus2CutPathDefs().map(def => {
+      const points = buildGenus2CutPoints(def, graph);
+      cuts.push(...buildGenus2CutEdges(def, points));
       return {
-        label: cut.label,
-        color: cut.color,
-        points: keys.map(key => graph.vertices.get(key).point),
+        label: def.label,
+        color: CUT_COLORS[def.label],
+        points: points
+          .filter((point, i) => i === 0 || point.key !== points[i - 1].key)
+          .map(point => graph.vertices.get(point.key).point),
       };
     });
+    const byEdgeKey = new Map();
+    for (const cut of cuts) {
+      if (!byEdgeKey.has(cut.edgeKey)) byEdgeKey.set(cut.edgeKey, []);
+      byEdgeKey.get(cut.edgeKey).push(cut);
+    }
     genus2CutSchemaCache = {
       cuts,
       graph,
       loops,
-      byEdgeKey: new Map(cuts.map(cut => [cut.edgeKey, cut])),
+      byEdgeKey,
     };
   }
   return genus2CutSchemaCache;
@@ -1768,14 +1945,13 @@ function genus2MoveEdgeKey(from, moveDir) {
 }
 
 function genus2StepWord(from, moveDir) {
-  const edge = moveDirToEdge(moveDir);
   const edgeKey = genus2MoveEdgeKey(from, moveDir);
-  const cut = getGenus2CutSchema().byEdgeKey.get(edgeKey);
-  if (!cut) return [];
-  const fromCellId = `${from.face || genus2StartFaceKey()}|${from.gx}|${from.gy}`;
-  return fromCellId === cut.cellId && edge === cut.edge
-    ? [cut.label]
-    : [cut.label.toUpperCase()];
+  const cuts = getGenus2CutSchema().byEdgeKey.get(edgeKey);
+  if (!cuts || cuts.length === 0) return [];
+  const face = from.face || genus2StartFaceKey();
+  const cut = cuts.find(candidate => candidate.face === face) || cuts[0];
+  const crossing = cut.tx * moveDir.dy - cut.ty * moveDir.dx;
+  return crossing >= 0 ? [cut.label] : [cut.label.toUpperCase()];
 }
 
 function advanceTopologyState(state, from, moveDir) {
@@ -1840,60 +2016,7 @@ function loopWordLabel(word) {
   return word.length > 0 ? word.join('') : '1';
 }
 
-function toggleParity(set, key) {
-  if (set.has(key)) set.delete(key);
-  else set.add(key);
-}
-
-function genus2LoopEdgeParity(closingMoveDir) {
-  const parity = new Set();
-  for (let i = snake.length - 1; i > 0; i--) {
-    const dir = inferStepDirection(snake[i], snake[i - 1]);
-    if (!dir) return null;
-    toggleParity(parity, genus2MoveEdgeKey(snake[i], dir));
-  }
-  toggleParity(parity, genus2MoveEdgeKey(snake[0], closingMoveDir));
-  return parity;
-}
-
-function genus2HomologyIsNonzero(edgeParity) {
-  if (!edgeParity || edgeParity.size === 0) return false;
-  const graph = getGenus2CutSchema().graph;
-  const values = new Map();
-
-  for (const start of graph.vertices.keys()) {
-    if (values.has(start)) continue;
-    values.set(start, 0);
-    const queue = [start];
-    while (queue.length > 0) {
-      const current = queue.shift();
-      const currentValue = values.get(current);
-      for (const edgeKey of graph.vertices.get(current).edges) {
-        const edge = graph.edges.get(edgeKey);
-        const next = edge.a === current ? edge.b : edge.a;
-        const required = currentValue ^ (edgeParity.has(edgeKey) ? 1 : 0);
-        if (!values.has(next)) {
-          values.set(next, required);
-          queue.push(next);
-        } else if (values.get(next) !== required) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-function genus2ClosureInfo(newTopo, closingMoveDir) {
-  const edgeParity = genus2LoopEdgeParity(closingMoveDir);
-  if (genus2HomologyIsNonzero(edgeParity)) {
-    return {
-      nontrivial: true,
-      label: 'H1 非零',
-    };
-  }
-
+function genus2ClosureInfo(newTopo) {
   const tailTopo = cloneTopologyState(snake[snake.length - 1].topo);
   const word = reduceGenus2Word([
     ...invertWord(tailTopo.word || []),
@@ -1920,7 +2043,7 @@ function tailClosureInfo(newTopo, closingMoveDir) {
     };
   }
   if (MAP_TYPE === 'genus2') {
-    return genus2ClosureInfo(newTopo, closingMoveDir);
+    return genus2ClosureInfo(newTopo);
   }
   return null;
 }
