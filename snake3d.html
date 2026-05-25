@@ -2125,8 +2125,8 @@ function updatePi1Panel() {
   setPi1Text('pi1Rel', `${GENUS2_RELATOR.join('')} = 1`);
 
   const head = snake[0];
+  if (!head) return;
   const tail = snake[snake.length - 1];
-  if (!head || !tail) return;
 
   const last = pi1LastStep || {
     step: '尚未移动',
@@ -2153,34 +2153,32 @@ function updatePi1Panel() {
     return;
   }
   const next = normalizeGridPosition(head.gx + dir.dx, head.gy + dir.dy, dir, head.side, head.face);
-  if (
-    next.blocked ||
-    next.gx !== tail.gx ||
-    next.gy !== tail.gy ||
-    !sameSurfaceSide(next.side, tail.side) ||
-    !sameSurfaceFace(next.face, tail.face)
-  ) {
+  const hitSelfIdx = next.blocked
+    ? -1
+    : snake.findIndex(s => sameSnakeCell(s, next.gx, next.gy, next.side ?? 1, next.face ?? null));
+  if (hitSelfIdx === -1) {
     setPi1Text('pi1Close', '下一步未闭合');
     return;
   }
 
   const newTopo = advanceTopologyState(head.topo, head, dir);
+  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
   const rawLoopWord = [
-    ...invertWord(tail.topo?.word || []),
+    ...invertWord(hitTopo.word || []),
     ...((newTopo && newTopo.word) || []),
   ];
   const loopWord = reduceGenus2Word(rawLoopWord);
   setPi1Text(
     'pi1Close',
-    `T^-1 H' = ${wordFormula(rawLoopWord)} -> ${wordFormula(loopWord)} (${loopWord.length > 0 ? '非平凡' : '平凡'})`,
+    `S${hitSelfIdx}^-1 H' = ${wordFormula(rawLoopWord)} -> ${wordFormula(loopWord)} (${loopWord.length > 0 ? '非平凡' : '平凡'})`,
     loopWord.length === 0,
   );
 }
 
-function genus2ClosureInfo(newTopo) {
-  const tailTopo = cloneTopologyState(snake[snake.length - 1].topo);
+function genus2ClosureInfo(newTopo, hitSelfIdx) {
+  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
   const word = reduceGenus2Word([
-    ...invertWord(tailTopo.word || []),
+    ...invertWord(hitTopo.word || []),
     ...((newTopo && newTopo.word) || []),
   ]);
   return {
@@ -2189,12 +2187,12 @@ function genus2ClosureInfo(newTopo) {
   };
 }
 
-function tailClosureInfo(newTopo, closingMoveDir) {
+function selfClosureInfo(newTopo, hitSelfIdx) {
   if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return null;
-  const tailTopo = cloneTopologyState(snake[snake.length - 1].topo);
+  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
   if (MAP_TYPE === 'torus') {
-    const wx = (newTopo?.wx || 0) - tailTopo.wx;
-    const wy = (newTopo?.wy || 0) - tailTopo.wy;
+    const wx = (newTopo?.wx || 0) - hitTopo.wx;
+    const wy = (newTopo?.wy || 0) - hitTopo.wy;
     const parts = [];
     if (wx !== 0) parts.push(`a:${wx}`);
     if (wy !== 0) parts.push(`b:${wy}`);
@@ -2204,7 +2202,7 @@ function tailClosureInfo(newTopo, closingMoveDir) {
     };
   }
   if (MAP_TYPE === 'genus2') {
-    return genus2ClosureInfo(newTopo);
+    return genus2ClosureInfo(newTopo, hitSelfIdx);
   }
   return null;
 }
@@ -2513,17 +2511,15 @@ function gameTick() {
 
   const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
   if (hitSelfIdx !== -1) {
-    const isTailClosure = LOOP_WIN_MAPS.has(MAP_TYPE) && hitSelfIdx === snake.length - 1;
-    const closure = isTailClosure ? tailClosureInfo(newHead.topo, moveDir) : null;
+    const closure = selfClosureInfo(newHead.topo, hitSelfIdx);
+    snake = [newHead, ...snake.slice(0, hitSelfIdx)];
     if (closure?.nontrivial) {
-      snake.unshift(newHead);
       winByLoop(closure);
       updateUI();
       return;
     }
 
-    snake = [newHead, ...snake.slice(0, hitSelfIdx)];
-    if (isTailClosure) {
+    if (closure) {
       addMsg('平凡闭合，尾部被切掉', 'warn');
     } else {
       addMsg('撞断身体！保留前 ' + snake.length + ' 节', 'warn');
