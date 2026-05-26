@@ -50,10 +50,10 @@
   }
   .map-card {
     width: 260px;
-    padding: 30px 20px 28px;
+    padding: 14px 16px 20px;
     background: rgba(255,255,255,0.04);
     border: 2px solid rgba(78,204,163,0.3);
-    border-radius: 12px;
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.25s;
     text-decoration: none;
@@ -64,9 +64,22 @@
     background: rgba(78,204,163,0.08);
     transform: translateY(-2px);
   }
-  .map-icon {
-    font-size: 3rem;
-    margin-bottom: 12px;
+  .surface-preview {
+    width: 100%;
+    height: 150px;
+    margin-bottom: 14px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #dce7ef;
+    border: 1px solid rgba(78,204,163,0.22);
+  }
+  .surface-preview canvas,
+  .surface-preview img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    pointer-events: none;
   }
   .map-name {
     font-size: 1.2rem;
@@ -89,28 +102,28 @@
   <h1 data-i18n="appName">Snake on Surfaces</h1>
   <div class="subtitle" data-i18n="subtitle">Choose a surface to start</div>
   <div class="maps">
-    <a class="map-card" data-map="sphere" href="snake3d.html?map=sphere&lang=en">
-      <div class="map-icon">🌐</div>
+    <a class="map-card" data-map="sphere" data-image="" href="snake3d.html?map=sphere&lang=en">
+      <div class="surface-preview"></div>
       <div class="map-name" data-i18n="sphere">Sphere</div>
     </a>
-    <a class="map-card" data-map="torus" href="snake3d.html?map=torus&lang=en">
-      <div class="map-icon">🔘</div>
+    <a class="map-card" data-map="torus" data-image="" href="snake3d.html?map=torus&lang=en">
+      <div class="surface-preview"></div>
       <div class="map-name" data-i18n="torus">Torus</div>
     </a>
-    <a class="map-card" data-map="genus2" href="snake3d.html?map=genus2&lang=en">
-      <div class="map-icon">∞</div>
+    <a class="map-card" data-map="genus2" data-image="" href="snake3d.html?map=genus2&lang=en">
+      <div class="surface-preview"></div>
       <div class="map-name" data-i18n="genus2">Genus 2</div>
     </a>
-    <a class="map-card" data-map="mobius" href="snake3d.html?map=mobius&lang=en">
-      <div class="map-icon">↻</div>
+    <a class="map-card" data-map="mobius" data-image="" href="snake3d.html?map=mobius&lang=en">
+      <div class="surface-preview"></div>
       <div class="map-name" data-i18n="mobius">Mobius Strip</div>
     </a>
-    <a class="map-card" data-map="projective" href="snake3d.html?map=projective&lang=en">
-      <div class="map-icon">⊙</div>
+    <a class="map-card" data-map="projective" data-image="" href="snake3d.html?map=projective&lang=en">
+      <div class="surface-preview"></div>
       <div class="map-name" data-i18n="projective">Projective Plane</div>
     </a>
-    <a class="map-card" data-map="klein" href="snake3d.html?map=klein&lang=en">
-      <div class="map-icon">♾</div>
+    <a class="map-card" data-map="klein" data-image="" href="snake3d.html?map=klein&lang=en">
+      <div class="surface-preview"></div>
       <div class="map-name" data-i18n="klein">Klein Bottle</div>
     </a>
   </div>
@@ -166,6 +179,256 @@ document.getElementById('langToggle').addEventListener('click', () => {
 });
 
 applyLanguage();
+</script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js';
+
+const previews = [];
+const previewPalette = {
+  sphere: 0x6fc7ff,
+  torus: 0x4ecca3,
+  genus2: 0x8fd3ff,
+  mobius: 0xffb35c,
+  projective: 0xb98cff,
+  klein: 0x66d9e8,
+};
+
+function createParametricGeometry(uSegments, vSegments, pointFn) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  const row = vSegments + 1;
+
+  for (let i = 0; i <= uSegments; i++) {
+    const u = i / uSegments;
+    for (let j = 0; j <= vSegments; j++) {
+      const v = j / vSegments;
+      const p = pointFn(u, v);
+      positions.push(p.x, p.y, p.z);
+      uvs.push(u, v);
+    }
+  }
+
+  for (let i = 0; i < uSegments; i++) {
+    for (let j = 0; j < vSegments; j++) {
+      const a = i * row + j;
+      const b = (i + 1) * row + j;
+      const c = i * row + j + 1;
+      const d = (i + 1) * row + j + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function mobiusPoint(u01, v01) {
+  const u = u01 * Math.PI * 2;
+  const width = 0.34;
+  const R = 0.78;
+  const t = (v01 - 0.5) * 2 * width;
+  const twist = u / 2;
+  const radial = R + t * Math.cos(twist);
+  return new THREE.Vector3(
+    radial * Math.cos(u),
+    t * Math.sin(twist),
+    radial * Math.sin(u),
+  );
+}
+
+function projectiveSquareToDisk(a, b) {
+  return {
+    x: a * Math.sqrt(Math.max(0, 1 - (b * b) / 2)),
+    y: b * Math.sqrt(Math.max(0, 1 - (a * a) / 2)),
+  };
+}
+
+function projectivePoint(u01, v01) {
+  const a = u01 * 2 - 1;
+  const b = v01 * 2 - 1;
+  const disk = projectiveSquareToDisk(a, b);
+  const radius = Math.min(1, Math.hypot(disk.x, disk.y));
+  const theta = Math.atan2(disk.y, disk.x);
+  const v = radius * Math.PI / 2;
+  const x = Math.cos(theta) * Math.sin(2 * v);
+  const y = Math.sin(theta) * Math.sin(2 * v);
+  const z = Math.cos(v) ** 2 - Math.cos(theta) ** 2 * Math.sin(v) ** 2;
+  return new THREE.Vector3(x * 0.9, z * 0.68, y * 0.9);
+}
+
+function kleinPoint(u01, v01) {
+  const u = u01 * Math.PI * 2;
+  const v = v01 * Math.PI * 2;
+  const tube = 2 * (1 - Math.cos(u) / 2);
+  let x;
+  let z;
+  if (u < Math.PI) {
+    x = 3 * Math.cos(u) * (1 + Math.sin(u)) + tube * Math.cos(u) * Math.cos(v);
+    z = -8 * Math.sin(u) - tube * Math.sin(u) * Math.cos(v);
+  } else {
+    x = 3 * Math.cos(u) * (1 + Math.sin(u)) + tube * Math.cos(v + Math.PI);
+    z = -8 * Math.sin(u);
+  }
+  const y = -tube * Math.sin(v);
+  const s = 0.12;
+  return new THREE.Vector3(x * s, -z * s * 0.78, y * s);
+}
+
+function makeMaterial(mapType) {
+  return new THREE.MeshStandardMaterial({
+    color: previewPalette[mapType],
+    roughness: 0.54,
+    metalness: 0.08,
+    side: ['mobius', 'projective', 'klein'].includes(mapType) ? THREE.DoubleSide : THREE.FrontSide,
+  });
+}
+
+function createFigureEightTubeGeometry(pathSegments, radialSegments) {
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  const tubeRadius = 0.16;
+  const forward = new THREE.Vector3(0, 0, 1);
+
+  function centerAt(t) {
+    const angle = t * Math.PI * 2;
+    return new THREE.Vector3(
+      Math.sin(angle) * 0.82,
+      Math.sin(angle * 2) * 0.34,
+      0,
+    );
+  }
+
+  for (let i = 0; i <= pathSegments; i++) {
+    const u = i / pathSegments;
+    const prev = centerAt(u - 1 / pathSegments);
+    const next = centerAt(u + 1 / pathSegments);
+    const center = centerAt(u);
+    const tangent = next.sub(prev).normalize();
+    const side = new THREE.Vector3().crossVectors(forward, tangent).normalize();
+
+    for (let j = 0; j <= radialSegments; j++) {
+      const v = j / radialSegments;
+      const angle = v * Math.PI * 2;
+      const normal = side.clone().multiplyScalar(Math.cos(angle)).add(forward.clone().multiplyScalar(Math.sin(angle))).normalize();
+      const point = center.clone().add(normal.clone().multiplyScalar(tubeRadius));
+      positions.push(point.x, point.y, point.z);
+      normals.push(normal.x, normal.y, normal.z);
+      uvs.push(u, v);
+    }
+  }
+
+  const row = radialSegments + 1;
+  for (let i = 0; i < pathSegments; i++) {
+    for (let j = 0; j < radialSegments; j++) {
+      const a = i * row + j;
+      const b = (i + 1) * row + j;
+      const c = i * row + j + 1;
+      const d = (i + 1) * row + j + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function createGenus2Preview(material) {
+  const group = new THREE.Group();
+  const geometry = new THREE.TorusGeometry(0.36, 0.17, 32, 88);
+  const left = new THREE.Mesh(geometry, material);
+  const right = new THREE.Mesh(geometry, material);
+  left.position.x = -0.34;
+  right.position.x = 0.34;
+  group.add(left, right);
+  group.scale.setScalar(1.03);
+  return group;
+}
+
+function createPreviewObject(mapType) {
+  const material = makeMaterial(mapType);
+  if (mapType === 'sphere') return new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), material);
+  if (mapType === 'torus') return new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.22, 36, 96), material);
+  if (mapType === 'genus2') return createGenus2Preview(material);
+  if (mapType === 'mobius') return new THREE.Mesh(createParametricGeometry(96, 16, mobiusPoint), material);
+  if (mapType === 'projective') return new THREE.Mesh(createParametricGeometry(72, 72, projectivePoint), material);
+  return new THREE.Mesh(createParametricGeometry(96, 24, kleinPoint), material);
+}
+
+function makePreview(card) {
+  const holder = card.querySelector('.surface-preview');
+  const imagePath = (card.dataset.image || '').trim();
+  if (imagePath) {
+    const img = document.createElement('img');
+    img.src = imagePath;
+    img.alt = card.querySelector('.map-name')?.textContent || '';
+    holder.appendChild(img);
+    return;
+  }
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xdce7ef);
+  const camera = new THREE.PerspectiveCamera(38, holder.clientWidth / holder.clientHeight, 0.1, 20);
+  camera.position.set(0, 0.95, 3.4);
+  camera.lookAt(0, 0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+  renderer.setSize(holder.clientWidth, holder.clientHeight, false);
+  holder.appendChild(renderer.domElement);
+
+  const object = createPreviewObject(card.dataset.map);
+  object.rotation.x = -0.28;
+  object.rotation.y = {
+    genus2: 0.04,
+    mobius: 0.55,
+    projective: -0.25,
+    klein: 1.05,
+  }[card.dataset.map] || 0;
+  scene.add(object);
+  scene.add(new THREE.AmbientLight(0xffffff, 2.1));
+  const key = new THREE.DirectionalLight(0xffffff, 2.4);
+  key.position.set(2.5, 3.2, 3.4);
+  scene.add(key);
+
+  previews.push({ holder, renderer, scene, camera, object, speed: 0.006 + previews.length * 0.0007 });
+}
+
+document.querySelectorAll('.map-card').forEach(makePreview);
+
+function resizePreviews() {
+  for (const preview of previews) {
+    const width = preview.holder.clientWidth;
+    const height = preview.holder.clientHeight;
+    preview.camera.aspect = width / height;
+    preview.camera.updateProjectionMatrix();
+    preview.renderer.setSize(width, height, false);
+  }
+}
+
+window.addEventListener('resize', resizePreviews);
+
+function animatePreviews() {
+  requestAnimationFrame(animatePreviews);
+  for (const preview of previews) {
+    preview.object.rotation.y += preview.speed;
+    preview.renderer.render(preview.scene, preview.camera);
+  }
+}
+
+animatePreviews();
 </script>
 </body>
 </html>
