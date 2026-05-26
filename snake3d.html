@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -28,6 +28,13 @@
     justify-content: space-between;
     padding: 12px 16px;
   }
+  .top-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    align-self: center;
+  }
   .top-bar {
     display: flex;
     justify-content: center;
@@ -37,9 +44,21 @@
     background: rgba(9, 12, 20, 0.86);
     padding: 8px 16px;
     border-radius: 6px;
-    align-self: center;
   }
   .top-bar span { font-weight: bold; }
+  .goal-line {
+    max-width: min(760px, calc(100vw - 32px));
+    text-align: center;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    background: rgba(9, 12, 20, 0.9);
+    border: 1px solid rgba(93,173,226,0.55);
+    border-radius: 6px;
+    padding: 7px 14px;
+    color: #dbefff;
+  }
+  .goal-line span { font-weight: bold; }
+  #goalText { color: #5dade2; }
   .life { color: #ff6b9d; }
   .msg-area {
     text-align: center;
@@ -182,53 +201,54 @@
 <div id="canvas-container"></div>
 
 <div id="overlay">
-  <div class="top-bar">
-    <div>分数: <span id="score" style="color:#f0a500">0</span></div>
-    <div>最高分: <span id="best" style="color:#f0a500">0</span></div>
-    <div>生命: <span class="life" id="lives">❤ ❤ ❤</span></div>
-    <div>速度: <span id="speedLabel" style="color:#aaa">正常</span></div>
-    <div>目标: <span id="goalText" style="color:#5dade2"></span></div>
+  <div class="top-panel">
+    <div class="top-bar">
+      <div><span id="scoreLabel">Score</span>: <span id="score" style="color:#f0a500">0</span></div>
+      <div><span id="bestLabel">Best</span>: <span id="best" style="color:#f0a500">0</span></div>
+      <div><span id="livesLabel">Lives</span>: <span class="life" id="lives">❤ ❤ ❤</span></div>
+    </div>
+    <div class="goal-line"><span id="goalLabel">Goal</span>: <span id="goalText"></span></div>
   </div>
   <div class="msg-area" id="msg"></div>
   <div class="bottom-bar">
     <div class="btn-row">
-      <button id="restart">重新开始</button>
-      <button class="btn2" id="pauseBtn">暂停</button>
-      <button class="btn2" id="resetCam">重置视角</button>
+      <button id="restart">Restart</button>
+      <button class="btn2" id="pauseBtn">Pause</button>
+      <button class="btn2" id="resetCam">Reset Camera</button>
     </div>
     <div class="legend">
-      <span style="color:#5e5">增益:</span>
-      <span><span class="dot" style="background:#e84545"></span>变长</span>
-      <span><span class="dot" style="background:#f4d03f"></span>减速</span>
-      <span><span class="dot" style="background:#ff6b9d"></span>+命</span>
+      <span id="buffLabel" style="color:#5e5">Buffs:</span>
+      <span><span class="dot" style="background:#2ecc71"></span><span id="growLabel">Grow</span></span>
+      <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
+      <span><span class="dot" style="background:#ff6b9d"></span><span id="extraLifeLabel">+Life</span></span>
       <span class="sepa">|</span>
-      <span style="color:#e55">减益:</span>
-      <span><span class="dot" style="background:#8b0000"></span>缩短</span>
-      <span><span class="dot" style="background:#e67e22"></span>加速</span>
-      <span><span class="dot" style="background:#6c3483"></span>-命</span>
+      <span id="debuffLabel" style="color:#e55">Debuffs:</span>
+      <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
+      <span><span class="dot" style="background:#f39c12"></span><span id="speedUpLabel">Speed Up</span></span>
+      <span><span class="dot" style="background:#8e44ad"></span><span id="loseLifeLabel">-Life</span></span>
     </div>
-    <div class="tip">方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角</div>
+    <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
 </div>
 
-<div class="pause-overlay" id="pauseOverlay" style="display:none;">暂停中</div>
+<div class="pause-overlay" id="pauseOverlay" style="display:none;">Paused</div>
 
 <div id="map-panel">
   <canvas id="mapCanvas" width="252" height="252"></canvas>
-  <div class="map-title">局部地图</div>
+  <div class="map-title" id="mapTitle">Chart</div>
 </div>
 
 <div id="pi1-panel" style="display:none;">
-  <div class="pi1-title">π1 计算</div>
-  <div class="pi1-row"><span class="pi1-key">关系</span><span class="pi1-val" id="pi1Rel">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">上一步</span><span class="pi1-val" id="pi1Step">-</span></div>
+  <div class="pi1-title" id="pi1Title">π1 Calculation</div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1RelLabel">Relation</span><span class="pi1-val" id="pi1Rel">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1StepLabel">Last step</span><span class="pi1-val" id="pi1Step">-</span></div>
   <div class="pi1-row"><span class="pi1-key">dx,dy</span><span class="pi1-val" id="pi1Move">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">cut/边</span><span class="pi1-val" id="pi1Cut">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">公式</span><span class="pi1-val" id="pi1Det">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">头词</span><span class="pi1-val" id="pi1Head">1</span></div>
-  <div class="pi1-row"><span class="pi1-key">尾词</span><span class="pi1-val" id="pi1Tail">1</span></div>
-  <div class="pi1-row"><span class="pi1-key">体词</span><span class="pi1-val" id="pi1Body">1</span></div>
-  <div class="pi1-row"><span class="pi1-key">闭合</span><span class="pi1-val" id="pi1Close">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1CutLabel">cut/edge</span><span class="pi1-val" id="pi1Cut">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1DetLabel">Formula</span><span class="pi1-val" id="pi1Det">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1HeadLabel">Head word</span><span class="pi1-val" id="pi1Head">1</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1TailLabel">Tail word</span><span class="pi1-val" id="pi1Tail">1</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1BodyLabel">Body word</span><span class="pi1-val" id="pi1Body">1</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1CloseLabel">Closure</span><span class="pi1-val" id="pi1Close">-</span></div>
 </div>
 
 <script type="module">
@@ -240,22 +260,176 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
    =========================== */
 const GRID_SIZE = 20;
 const INITIAL_SNAKE_LENGTH = 3;
-const SPAWN_INTERVAL = 35;
-const FOOD_LIFETIME = 160;
-const MAX_FOODS = 7;
+const SPAWN_INTERVAL = 24;
+const FOOD_LIFETIME = 220;
+const INITIAL_FOODS = 4;
+const MIN_FOODS = 3;
+const MAX_FOODS = 9;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
 const FOOD_DEF = {
-  grow:      { color: 0xe84545, label: '变长', weight: 45, good: true },
-  slow:      { color: 0xf4d03f, label: '减速', weight: 9,  good: true },
-  extraLife: { color: 0xff6b9d, label: '+命',  weight: 4,  good: true },
-  shrink:    { color: 0x8b0000, label: '缩短', weight: 29, good: false },
-  speedUp:   { color: 0xe67e22, label: '加速', weight: 9,  good: false },
-  loseLife:  { color: 0x6c3483, label: '-命',  weight: 4,  good: false },
+  grow:      { color: 0x2ecc71, weight: 48, good: true },
+  slow:      { color: 0x3498db, weight: 8,  good: true },
+  extraLife: { color: 0xff6b9d, weight: 4,  good: true },
+  shrink:    { color: 0xc0392b, weight: 28, good: false },
+  speedUp:   { color: 0xf39c12, weight: 8,  good: false },
+  loseLife:  { color: 0x8e44ad, weight: 4,  good: false },
 };
 
 const urlParams = new URLSearchParams(location.search);
 const requestedMap = urlParams.get('map');
+const requestedLang = urlParams.get('lang') || localStorage.getItem('snake3dLang') || 'en';
+const LANG = requestedLang === 'zh' ? 'zh' : 'en';
+localStorage.setItem('snake3dLang', LANG);
+document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+
+const TEXT = {
+  en: {
+    score: 'Score',
+    best: 'Best',
+    lives: 'Lives',
+    goal: 'Goal',
+    restart: 'Restart',
+    pause: 'Pause',
+    resume: 'Resume',
+    resetCamera: 'Reset Camera',
+    paused: 'Paused',
+    buffs: 'Buffs:',
+    debuffs: 'Debuffs:',
+    grow: 'Grow',
+    slow: 'Slow',
+    extraLife: '+Life',
+    shrink: 'Shrink',
+    speedUp: 'Speed Up',
+    loseLife: '-Life',
+    tip: 'Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
+    localMap: 'Chart',
+    pi1Title: 'π1 Calculation',
+    pi1Rel: 'Relation',
+    pi1Step: 'Last step',
+    pi1Cut: 'cut/edge',
+    pi1Det: 'Formula',
+    pi1Head: 'Head word',
+    pi1Tail: 'Tail word',
+    pi1Body: 'Body word',
+    pi1Close: 'Closure',
+    goalSphere: 'Close the snake into any loop',
+    goalTorus: 'Close the snake into a nontrivial loop',
+    goalGenus2: 'Close the snake into a nontrivial loop',
+    goalProjective: 'Close the snake into a nontrivial loop',
+    goalMobius: 'Close the snake into a nontrivial loop without crossing the boundary',
+    goalKlein: 'Close the snake into a nontrivial loop',
+    goalDefault: 'Classic snake',
+    noBoundaryCross: 'no boundary crossing',
+    crossedBoundary: 'cross boundary x{n}',
+    noCut: 'no cut crossed',
+    noBoundaryCut: 'no boundary cut crossed',
+    boundary: 'boundary',
+    boundaryEdge: '{edge} edge',
+    bandBoundary: 'strip boundary',
+    closedLoopAny: 'any closed loop',
+    winClosed: 'Win! Closed into a loop',
+    winNontrivial: 'Win! Closed into a nontrivial loop: {label}',
+    failBoundary: 'Closed loop crossed the boundary; no win',
+    failTrivial: 'Trivial loop; tail cut off',
+    notMoved: 'not moved yet',
+    nextNotClosed: 'next step not closed',
+    nontrivial: 'nontrivial',
+    trivial: 'trivial',
+    candidates: 'candidates {list}; use {letter}',
+    boundaryToA: 'boundary {edge} -> a',
+    crossedStripBoundary: 'crossed strip boundary',
+    noWinClosure: 'this closure does not count as a win',
+    glueEdgeU: 'u glued edge',
+    gameOver: 'Game over!',
+    hitBoundary: 'Hit the boundary!',
+    hitSelf: 'Hit yourself!',
+    livesLeft: '{n} lives left',
+    grew: 'Grew +1',
+    slowed: 'Slowed down',
+    extraLifeMsg: '+1 life',
+    shortened: 'Shortened',
+    spedUp: 'Sped up',
+    lostLife: '-1 life! {n} lives left',
+    bodyCut: 'Body cut; kept {n} segments',
+  },
+  zh: {
+    score: '分数',
+    best: '最高分',
+    lives: '生命',
+    goal: '目标',
+    restart: '重新开始',
+    pause: '暂停',
+    resume: '继续',
+    resetCamera: '重置视角',
+    paused: '暂停中',
+    buffs: '增益:',
+    debuffs: '减益:',
+    grow: '变长',
+    slow: '减速',
+    extraLife: '+命',
+    shrink: '缩短',
+    speedUp: '加速',
+    loseLife: '-命',
+    tip: '方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角',
+    localMap: '局部地图',
+    pi1Title: 'π1 计算',
+    pi1Rel: '关系',
+    pi1Step: '上一步',
+    pi1Cut: 'cut/边',
+    pi1Det: '公式',
+    pi1Head: '头词',
+    pi1Tail: '尾词',
+    pi1Body: '体词',
+    pi1Close: '闭合',
+    goalSphere: '形成衔尾蛇：任意闭合环路',
+    goalTorus: '形成衔尾蛇：非平凡环路',
+    goalGenus2: '形成衔尾蛇：非平凡环路',
+    goalProjective: '形成衔尾蛇：非平凡环路',
+    goalMobius: '形成衔尾蛇：不跨边界的非平凡环路',
+    goalKlein: '形成衔尾蛇：非平凡环路',
+    goalDefault: '普通贪吃蛇',
+    noBoundaryCross: '不跨边界',
+    crossedBoundary: '跨边界×{n}',
+    noCut: '未穿过 cut',
+    noBoundaryCut: '未穿过边界 cut',
+    boundary: '边界',
+    boundaryEdge: '{edge} 边',
+    bandBoundary: '边界',
+    closedLoopAny: '任意闭合环路',
+    winClosed: '胜利！形成闭合环路',
+    winNontrivial: '胜利！闭合为非平凡回路 {label}',
+    failBoundary: '闭合环路跨过边界，不计胜利',
+    failTrivial: '平凡闭合，尾部被切掉',
+    notMoved: '尚未移动',
+    nextNotClosed: '下一步未闭合',
+    nontrivial: '非平凡',
+    trivial: '平凡',
+    candidates: '候选 {list}；采用 {letter}',
+    boundaryToA: '边界 {edge} -> a',
+    crossedStripBoundary: '跨过带边界',
+    noWinClosure: '该闭合不计胜利',
+    glueEdgeU: 'u 粘边',
+    gameOver: '游戏结束！',
+    hitBoundary: '撞到边界！',
+    hitSelf: '撞到自己！',
+    livesLeft: '剩余 {n} 条命',
+    grew: '变长 +1',
+    slowed: '减速！',
+    extraLifeMsg: '+1 生命',
+    shortened: '身体缩短！',
+    spedUp: '加速！',
+    lostLife: '-1 生命！剩余 {n} 条',
+    bodyCut: '撞断身体！保留前 {n} 节',
+  },
+};
+
+function tr(key, vars = {}) {
+  const table = TEXT[LANG] || TEXT.en;
+  const value = table[key] ?? TEXT.en[key] ?? key;
+  return value.replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? '');
+}
+
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
 const LOOP_WIN_MAPS = new Set(['sphere', 'torus', 'genus2', 'projective', 'mobius', 'klein']);
 const PI1_PANEL_MAPS = new Set(['genus2', 'projective', 'mobius', 'klein']);
@@ -272,6 +446,40 @@ const CUT_COLORS = {
 const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'd', 'b', 'D', 'B'];
 const PROJECTIVE_RELATOR = ['a', 'a'];
 const KLEIN_RELATOR = ['a', 'b', 'A', 'b'];
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function applyStaticText() {
+  setText('scoreLabel', tr('score'));
+  setText('bestLabel', tr('best'));
+  setText('livesLabel', tr('lives'));
+  setText('goalLabel', tr('goal'));
+  setText('restart', tr('restart'));
+  setText('resetCam', tr('resetCamera'));
+  setText('pauseOverlay', tr('paused'));
+  setText('buffLabel', tr('buffs'));
+  setText('debuffLabel', tr('debuffs'));
+  setText('growLabel', tr('grow'));
+  setText('slowLabel', tr('slow'));
+  setText('extraLifeLabel', tr('extraLife'));
+  setText('shrinkLabel', tr('shrink'));
+  setText('speedUpLabel', tr('speedUp'));
+  setText('loseLifeLabel', tr('loseLife'));
+  setText('tipText', tr('tip'));
+  setText('mapTitle', tr('localMap'));
+  setText('pi1Title', tr('pi1Title'));
+  setText('pi1RelLabel', tr('pi1Rel'));
+  setText('pi1StepLabel', tr('pi1Step'));
+  setText('pi1CutLabel', tr('pi1Cut'));
+  setText('pi1DetLabel', tr('pi1Det'));
+  setText('pi1HeadLabel', tr('pi1Head'));
+  setText('pi1TailLabel', tr('pi1Tail'));
+  setText('pi1BodyLabel', tr('pi1Body'));
+  setText('pi1CloseLabel', tr('pi1Close'));
+}
 
 /* ===========================
    TORUS MESH
@@ -1342,22 +1550,16 @@ function drawFoodMark(ctx, f) {
   const def = FOOD_DEF[f.type];
   const lifeLeft = 1 - f.age / FOOD_LIFETIME;
   const time = performance.now() / 1000;
-  const pulse = 0.6 + 0.4 * Math.sin(time * 4 + f.gx * 2.5 + f.gy * 3.1);
+  const pulse = 0.82 + 0.18 * Math.sin(time * 4 + f.gx * 2.5 + f.gy * 3.1);
+  const pad = Math.max(1.5, px * 0.10);
   ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
-  ctx.globalAlpha = (0.5 + 0.5 * lifeLeft) * pulse;
-  ctx.beginPath();
-  ctx.arc(cx, cy, px * 0.38, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 0.9;
-  ctx.beginPath();
-  ctx.arc(cx, cy, px * 0.12, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.globalAlpha = (0.65 + 0.35 * lifeLeft) * pulse;
+  ctx.fillRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
+  ctx.globalAlpha = 0.36;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = Math.max(1, px * 0.05);
+  ctx.strokeRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
   ctx.globalAlpha = 1;
-  ctx.fillStyle = '#fff';
-  ctx.font = `${Math.max(8, Math.floor(px * 0.38))}px monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(def.label, cx, cy);
 }
 
 function drawSnakeMark(ctx, s, i) {
@@ -1403,8 +1605,9 @@ function drawSurfaceGrid(ctx, size) {
   ctx.strokeStyle = 'rgba(168,228,210,0.26)';
   ctx.lineWidth = 1;
   const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+  const step = MAP_TYPE === 'mobius' ? 2 : 1;
   const px = size / gridSize;
-  for (let i = 0; i <= gridSize; i++) {
+  for (let i = 0; i <= gridSize; i += step) {
     const pos = i * px;
     ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
@@ -2333,7 +2536,7 @@ function mobiusStateFormula(state) {
   const w = state?.w || 0;
   const boundary = state?.boundary || 0;
   const loop = powerTerm('a', w) || '1';
-  return boundary > 0 ? `${loop}; 跨边界×${boundary}` : loop;
+  return boundary > 0 ? `${loop}; ${tr('crossedBoundary', { n: boundary })}` : loop;
 }
 
 function kleinNormalFormula(word) {
@@ -2357,7 +2560,7 @@ function topologyRelationFormula() {
   if (MAP_TYPE === 'torus') return 'abAB = 1';
   if (MAP_TYPE === 'genus2') return `${GENUS2_RELATOR.join('')} = 1`;
   if (MAP_TYPE === 'projective') return `${PROJECTIVE_RELATOR.join('')} = 1`;
-  if (MAP_TYPE === 'mobius') return 'π1 = <a> ≅ Z；不跨边界';
+  if (MAP_TYPE === 'mobius') return `π1 = <a> ≅ Z; ${tr('noBoundaryCross')}`;
   if (MAP_TYPE === 'klein') return `${KLEIN_RELATOR.join('')} = 1`;
   return '-';
 }
@@ -2383,7 +2586,7 @@ function describeTorusMove(from, moveDir) {
   if (delta.wy < 0) letters.push('B');
   if (letters.length === 0) {
     return {
-      step: '未穿过 cut',
+      step: tr('noCut'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
       cut: '-',
       det: '-',
@@ -2407,20 +2610,21 @@ function describeGenus2Move(from, moveDir) {
   const face = from.face || genus2StartFaceKey();
   if (!selected) {
     return {
-      step: '未穿过 cut',
+      step: tr('noCut'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
       cut: '-',
       det: '-',
     };
   }
   const candidateText = candidates.length > 1
-    ? `候选 ${candidates.map(c => c.letter).join(',')}；采用 ${selected.letter}`
+    ? tr('candidates', { list: candidates.map(c => c.letter).join(','), letter: selected.letter })
     : `cut ${selected.cut.label} -> ${selected.letter}`;
   return {
     step: `${candidateText} @ ${face}`,
     move: `(${moveDir.dx}, ${moveDir.dy})`,
     cut: `(${selected.cut.tx}, ${selected.cut.ty})`,
     det: `${selected.cut.tx}*${moveDir.dy} - ${selected.cut.ty}*${moveDir.dx} = ${selected.det}`,
+    warn: candidates.length > 1,
   };
 }
 
@@ -2428,7 +2632,7 @@ function describeProjectiveMove(from, moveDir) {
   const edge = boundaryCrossingEdge(from, moveDir);
   if (!edge) {
     return {
-      step: '未穿过边界 cut',
+      step: tr('noBoundaryCut'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
       cut: '-',
       det: '-',
@@ -2437,9 +2641,9 @@ function describeProjectiveMove(from, moveDir) {
   const before = wordFormula(from.topo?.word || []);
   const after = wordFormula(reduceProjectiveWord([...(from.topo?.word || []), 'a']));
   return {
-    step: `边界 ${edge} -> a`,
+    step: tr('boundaryToA', { edge }),
     move: `(${moveDir.dx}, ${moveDir.dy})`,
-    cut: `${edge} 边`,
+    cut: tr('boundaryEdge', { edge }),
     det: `${before}·a -> ${after}, aa=1`,
   };
 }
@@ -2453,15 +2657,15 @@ function describeMobiusMove(from, moveDir) {
   };
   if (delta.boundary > 0) {
     return {
-      step: '跨过带边界',
+      step: tr('crossedStripBoundary'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
-      cut: '边界',
-      det: `${before} -> ${mobiusStateFormula(afterState)}；该闭合不计胜利`,
+      cut: tr('bandBoundary'),
+      det: `${before} -> ${mobiusStateFormula(afterState)}; ${tr('noWinClosure')}`,
     };
   }
   if (delta.w === 0) {
     return {
-      step: '未穿过 cut',
+      step: tr('noCut'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
       cut: '-',
       det: '-',
@@ -2471,7 +2675,7 @@ function describeMobiusMove(from, moveDir) {
   return {
     step: `cut a -> ${letter}`,
     move: `(${moveDir.dx}, ${moveDir.dy})`,
-    cut: 'u 粘边',
+    cut: tr('glueEdgeU'),
     det: `${before}·${letter} = ${mobiusStateFormula(afterState)}`,
   };
 }
@@ -2480,7 +2684,7 @@ function describeKleinMove(from, moveDir) {
   const crossing = kleinStepCrossing(from, moveDir);
   if (!crossing) {
     return {
-      step: '未穿过 cut',
+      step: tr('noCut'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
       cut: '-',
       det: '-',
@@ -2511,9 +2715,9 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
   if (MAP_TYPE === 'sphere') {
     return {
       nontrivial: true,
-      label: '任意闭合环路',
-      reducedLabel: '任意闭合环路',
-      winText: '胜利！形成闭合环路',
+      label: tr('closedLoopAny'),
+      reducedLabel: tr('closedLoopAny'),
+      winText: tr('winClosed'),
     };
   }
 
@@ -2535,7 +2739,7 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
       nontrivial: w !== 0 && !crossesBoundary,
       label: mobiusStateFormula({ w, boundary }),
       reducedLabel: mobiusStateFormula({ w, boundary }),
-      failLabel: crossesBoundary ? '闭合环路跨过边界，不计胜利' : '平凡闭合，尾部被切掉',
+      failLabel: crossesBoundary ? tr('failBoundary') : tr('failTrivial'),
     };
   }
 
@@ -2568,12 +2772,12 @@ function updatePi1Panel() {
   const tail = snake[snake.length - 1];
 
   const last = pi1LastStep || {
-    step: '尚未移动',
+    step: tr('notMoved'),
     move: '-',
     cut: '-',
     det: '-',
   };
-  setPi1Text('pi1Step', last.step, last.step.includes('候选'));
+  setPi1Text('pi1Step', last.step, !!last.warn);
   setPi1Text('pi1Move', last.move);
   setPi1Text('pi1Cut', last.cut);
   setPi1Text('pi1Det', last.det);
@@ -2593,7 +2797,7 @@ function updatePi1Panel() {
     ? -1
     : snake.findIndex(s => sameSnakeCell(s, next.gx, next.gy, next.side ?? 1, next.face ?? null));
   if (hitSelfIdx === -1) {
-    setPi1Text('pi1Close', '下一步未闭合');
+    setPi1Text('pi1Close', tr('nextNotClosed'));
     return;
   }
 
@@ -2605,7 +2809,7 @@ function updatePi1Panel() {
     : loopInfo.reducedLabel;
   setPi1Text(
     'pi1Close',
-    `S${hitSelfIdx}^-1 H' = ${loopFormula} (${loopInfo.nontrivial ? '非平凡' : '平凡'})`,
+    `S${hitSelfIdx}^-1 H' = ${loopFormula} (${loopInfo.nontrivial ? tr('nontrivial') : tr('trivial')})`,
     !loopInfo.nontrivial,
   );
 }
@@ -2682,27 +2886,19 @@ let foods = [];
 let fieldScale = 1.0;
 let score, lives, speed, best, running, paused;
 let spawnTimer;
-let msgs = [];
+let msgTimer = null;
 let tickStartTime = 0;
 let tickInterval = 100;
 let loop = null;
 
-function speedLabel() {
-  if (speed <= 55) return '极快';
-  if (speed <= 75) return '快';
-  if (speed <= 115) return '正常';
-  if (speed <= 170) return '慢';
-  return '很慢';
-}
-
 function victoryGoalText() {
-  if (MAP_TYPE === 'sphere') return '形成衔尾蛇：任意闭合环路';
-  if (MAP_TYPE === 'torus') return '形成衔尾蛇：非平凡环路';
-  if (MAP_TYPE === 'genus2') return '形成衔尾蛇：非平凡同伦类';
-  if (MAP_TYPE === 'projective') return '形成衔尾蛇：非平凡环路';
-  if (MAP_TYPE === 'mobius') return '形成衔尾蛇：不跨边界的非平凡环路';
-  if (MAP_TYPE === 'klein') return '形成衔尾蛇：非平凡环路';
-  return '普通贪吃蛇';
+  if (MAP_TYPE === 'sphere') return tr('goalSphere');
+  if (MAP_TYPE === 'torus') return tr('goalTorus');
+  if (MAP_TYPE === 'genus2') return tr('goalGenus2');
+  if (MAP_TYPE === 'projective') return tr('goalProjective');
+  if (MAP_TYPE === 'mobius') return tr('goalMobius');
+  if (MAP_TYPE === 'klein') return tr('goalKlein');
+  return tr('goalDefault');
 }
 
 function updateUI() {
@@ -2711,10 +2907,9 @@ function updateUI() {
   const hearts = [];
   for (let i = 0; i < lives; i++) hearts.push('❤');
   document.getElementById('lives').textContent = hearts.join(' ') || '💀';
-  document.getElementById('speedLabel').textContent = speedLabel();
   document.getElementById('goalText').textContent = victoryGoalText();
   document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
-  document.getElementById('pauseBtn').textContent = paused ? '继续' : '暂停';
+  document.getElementById('pauseBtn').textContent = paused ? tr('resume') : tr('pause');
 }
 
 function sameSnakeCell(a, gx, gy, side, face) {
@@ -2733,15 +2928,19 @@ function setMsg(text, cls) {
   el.className = 'msg-area' + (cls ? ' ' + cls : '');
 }
 
-function addMsg(text, cls) {
-  msgs.push({ text, cls, time: performance.now() });
-  if (msgs.length > 5) msgs.shift();
-  // Show latest non-expired message
-  const now = performance.now();
-  const recent = msgs.filter(m => now - m.time < 2000);
-  if (recent.length > 0) {
-    const m = recent[recent.length - 1];
-    setMsg(m.text, m.cls);
+function clearMsgTimer() {
+  if (msgTimer) clearTimeout(msgTimer);
+  msgTimer = null;
+}
+
+function addMsg(text, cls, duration = 1600) {
+  clearMsgTimer();
+  setMsg(text, cls);
+  if (duration > 0) {
+    msgTimer = setTimeout(() => {
+      setMsg('');
+      msgTimer = null;
+    }, duration);
   }
 }
 
@@ -2798,26 +2997,26 @@ function applyEffect(type) {
         best = score;
         localStorage.setItem(`snake3dBest_${MAP_TYPE}`, best);
       }
-      addMsg('变长 +1', 'good');
+      addMsg(tr('grew'), 'good');
       break;
     case 'slow':
       speed = Math.min(speed + 30, 250);
       restartLoop();
-      addMsg('减速！', 'good');
+      addMsg(tr('slowed'), 'good');
       break;
     case 'extraLife':
       lives++;
-      addMsg('+1 生命', 'good');
+      addMsg(tr('extraLifeMsg'), 'good');
       break;
     case 'shrink':
       if (snake.length > 2) { snake.pop(); snake.pop(); }
       else if (snake.length > 1) { snake.pop(); }
-      addMsg('身体缩短！', 'warn');
+      addMsg(tr('shortened'), 'warn');
       break;
     case 'speedUp':
       speed = Math.max(speed - 30, 40);
       restartLoop();
-      addMsg('加速！', 'warn');
+      addMsg(tr('spedUp'), 'warn');
       break;
     case 'loseLife':
       loseLife();
@@ -2829,30 +3028,31 @@ function loseLife() {
   lives--;
   if (lives <= 0) {
     running = false;
-    setMsg('游戏结束！', 'dead');
-    addMsg('游戏结束！', 'dead');
+    clearMsgTimer();
+    setMsg(tr('gameOver'), 'dead');
   } else {
-    addMsg('-1 生命！剩余 ' + lives + ' 条', 'warn');
+    addMsg(tr('lostLife', { n: lives }), 'warn');
   }
 }
 
-function die(reason = '撞到自己！') {
+function die(reason = tr('hitSelf')) {
   lives--;
   if (lives <= 0) {
     running = false;
-    setMsg('游戏结束！', 'dead');
-    addMsg('游戏结束！', 'dead');
+    clearMsgTimer();
+    setMsg(tr('gameOver'), 'dead');
   } else {
     resetSnakeOnDeath();
-    addMsg(reason + '剩余 ' + lives + ' 条命', 'warn');
+    const sep = LANG === 'zh' ? '' : ' ';
+    addMsg(`${reason}${sep}${tr('livesLeft', { n: lives })}`, 'warn');
   }
 }
 
 function winByLoop(info) {
   running = false;
-  const text = info.winText || `胜利！闭合为非平凡回路 ${info.label}`;
+  const text = info.winText || tr('winNontrivial', { label: info.label });
+  clearMsgTimer();
   setMsg(text, 'good');
-  addMsg(text, 'good');
 }
 
 function resetSnakeOnDeath() {
@@ -2880,6 +3080,7 @@ function gameTick() {
 
   // Age foods
   foods = foods.filter(f => { f.age++; return f.age < FOOD_LIFETIME; });
+  for (let i = foods.length; i < MIN_FOODS; i++) trySpawnFood();
 
   // Spawn timer
   spawnTimer--;
@@ -2894,7 +3095,7 @@ function gameTick() {
   const moveDir = { ...direction };
   const next = normalizeGridPosition(head.gx + direction.dx, head.gy + direction.dy, direction, head.side, head.face);
   if (next.blocked) {
-    die('撞到边界！');
+    die(tr('hitBoundary'));
     return;
   }
   const newGx = next.gx;
@@ -2926,9 +3127,9 @@ function gameTick() {
     }
 
     if (closure) {
-      addMsg(closure.failLabel || '平凡闭合，尾部被切掉', 'warn');
+      addMsg(closure.failLabel || tr('failTrivial'), 'warn');
     } else {
-      addMsg('撞断身体！保留前 ' + snake.length + ' 节', 'warn');
+      addMsg(tr('bodyCut', { n: snake.length }), 'warn');
     }
     updateUI();
     return;
@@ -2942,6 +3143,7 @@ function gameTick() {
     const eaten = foods[eatenIdx];
     foods.splice(eatenIdx, 1);
     applyEffect(eaten.type);
+    trySpawnFood();
   } else {
     snake.pop();
   }
@@ -3045,6 +3247,7 @@ document.getElementById('resetCam').addEventListener('click', resetCamera);
    INIT
    =========================== */
 function init() {
+  applyStaticText();
   fieldScale = 1.0;
   ensureSurfaceGeometry();
   score = 0;
@@ -3054,14 +3257,12 @@ function init() {
   paused = false;
   foods = [];
   spawnTimer = SPAWN_INTERVAL;
-  msgs = [];
+  clearMsgTimer();
   best = parseInt(localStorage.getItem(`snake3dBest_${MAP_TYPE}`) || '0');
 
   resetSnake();
 
-  // Seed initial foods
-  trySpawnFood();
-  trySpawnFood();
+  for (let i = 0; i < INITIAL_FOODS; i++) trySpawnFood();
 
   setMsg('');
   updateUI();
@@ -3127,14 +3328,12 @@ function drawMiniMap() {
     const m = worldToChart(f.gx, f.gy, f.side, f.face);
     if (!m) continue;
     const def = FOOD_DEF[f.type];
-    const r = MAP_PX * 0.35;
+    const pad = MAP_PX * 0.16;
     ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
-    ctx.beginPath(); ctx.arc(m.cx, m.cy, r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = `${Math.max(7, Math.floor(MAP_PX*0.30))}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(def.label, m.cx, m.cy);
+    ctx.fillRect(m.cx - MAP_PX / 2 + pad, m.cy - MAP_PX / 2 + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(m.cx - MAP_PX / 2 + pad, m.cy - MAP_PX / 2 + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
   }
 
   // Snake (tail first, head on top)

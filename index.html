@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Snake on Surfaces — 选择地图</title>
+<title>Snake on Surfaces — Choose a Surface</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -16,6 +16,21 @@
     color: #eee;
   }
   .container { text-align: center; }
+  .lang-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    padding: 7px 14px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    background: #4ecca3;
+    color: #10131c;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  .lang-toggle:hover { background: #3db88f; }
   h1 {
     font-size: 2rem;
     margin-bottom: 6px;
@@ -35,7 +50,7 @@
   }
   .map-card {
     width: 260px;
-    padding: 28px 20px;
+    padding: 30px 20px 28px;
     background: rgba(255,255,255,0.04);
     border: 2px solid rgba(78,204,163,0.3);
     border-radius: 12px;
@@ -59,60 +74,89 @@
     letter-spacing: 2px;
     margin-bottom: 8px;
   }
-  .map-desc {
-    font-size: 0.78rem;
-    color: #999;
-    line-height: 1.5;
-  }
-  .map-genus {
-    font-size: 0.7rem;
-    color: #666;
-    margin-top: 10px;
-  }
 </style>
 </head>
 <body>
+<button class="lang-toggle" id="langToggle">中文</button>
 <div class="container">
   <h1>Snake on Surfaces</h1>
-  <div class="subtitle">选择地图开始游戏</div>
+  <div class="subtitle" data-i18n="subtitle">Choose a surface to start</div>
   <div class="maps">
-    <a class="map-card" href="snake3d.html?map=sphere">
+    <a class="map-card" data-map="sphere" href="snake3d.html?map=sphere&lang=en">
       <div class="map-icon">🌐</div>
-      <div class="map-name">球 面</div>
-      <div class="map-desc">经典球面<br>两个方向自由环绕</div>
-      <div class="map-genus">亏格 0</div>
+      <div class="map-name" data-i18n="sphere">Sphere</div>
     </a>
-    <a class="map-card" href="snake3d.html?map=torus">
+    <a class="map-card" data-map="torus" href="snake3d.html?map=torus&lang=en">
       <div class="map-icon">🔘</div>
-      <div class="map-name">环 面</div>
-      <div class="map-desc">经典甜甜圈表面<br>两个方向自由环绕</div>
-      <div class="map-genus">亏格 1</div>
+      <div class="map-name" data-i18n="torus">Torus</div>
     </a>
-    <a class="map-card" href="snake3d.html?map=genus2">
+    <a class="map-card" data-map="genus2" href="snake3d.html?map=genus2&lang=en">
       <div class="map-icon">∞</div>
-      <div class="map-name">双孔曲面</div>
-      <div class="map-desc">∞ 形双孔曲面<br>沿两孔连续穿梭</div>
-      <div class="map-genus">亏格 2</div>
+      <div class="map-name" data-i18n="genus2">Genus 2</div>
     </a>
-    <a class="map-card" href="snake3d.html?map=projective">
+    <a class="map-card" data-map="projective" href="snake3d.html?map=projective&lang=en">
       <div class="map-icon">⊙</div>
-      <div class="map-name">射影平面</div>
-      <div class="map-desc">交叉帽浸入<br>两组反向粘边</div>
-      <div class="map-genus">非定向 · 闭曲面</div>
+      <div class="map-name" data-i18n="projective">Projective Plane</div>
     </a>
-    <a class="map-card" href="snake3d.html?map=mobius">
+    <a class="map-card" data-map="mobius" href="snake3d.html?map=mobius&lang=en">
       <div class="map-icon">↻</div>
-      <div class="map-name">莫比乌斯带</div>
-      <div class="map-desc">一组反向粘边<br>横穿后抵达反面</div>
-      <div class="map-genus">非定向 · 有边界</div>
+      <div class="map-name" data-i18n="mobius">Mobius Strip</div>
     </a>
-    <a class="map-card" href="snake3d.html?map=klein">
+    <a class="map-card" data-map="klein" href="snake3d.html?map=klein&lang=en">
       <div class="map-icon">♾</div>
-      <div class="map-name">克莱因瓶</div>
-      <div class="map-desc">一组反向粘边<br>一组周期粘边</div>
-      <div class="map-genus">非定向 · 闭曲面</div>
+      <div class="map-name" data-i18n="klein">Klein Bottle</div>
     </a>
   </div>
 </div>
+<script>
+const I18N = {
+  en: {
+    title: 'Snake on Surfaces — Choose a Surface',
+    toggle: '中文',
+    subtitle: 'Choose a surface to start',
+    sphere: 'Sphere',
+    torus: 'Torus',
+    genus2: 'Genus 2',
+    projective: 'Projective Plane',
+    mobius: 'Mobius Strip',
+    klein: 'Klein Bottle',
+  },
+  zh: {
+    title: 'Snake on Surfaces — 选择地图',
+    toggle: 'English',
+    subtitle: '选择地图开始游戏',
+    sphere: '球 面',
+    torus: '环 面',
+    genus2: '双孔曲面',
+    projective: '射影平面',
+    mobius: '莫比乌斯带',
+    klein: '克莱因瓶',
+  },
+};
+let lang = localStorage.getItem('snake3dLang') || 'en';
+if (!I18N[lang]) lang = 'en';
+
+function applyLanguage() {
+  const dict = I18N[lang];
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = dict.title;
+  document.getElementById('langToggle').textContent = dict.toggle;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = dict[el.dataset.i18n];
+  });
+  document.querySelectorAll('.map-card').forEach(link => {
+    const map = link.dataset.map;
+    link.href = `snake3d.html?map=${map}&lang=${lang}`;
+  });
+}
+
+document.getElementById('langToggle').addEventListener('click', () => {
+  lang = lang === 'en' ? 'zh' : 'en';
+  localStorage.setItem('snake3dLang', lang);
+  applyLanguage();
+});
+
+applyLanguage();
+</script>
 </body>
 </html>
