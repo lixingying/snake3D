@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D 贪吃蛇</title>
+<title>Snake on Surfaces</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -187,6 +187,7 @@
     <div>最高分: <span id="best" style="color:#f0a500">0</span></div>
     <div>生命: <span class="life" id="lives">❤ ❤ ❤</span></div>
     <div>速度: <span id="speedLabel" style="color:#aaa">正常</span></div>
+    <div>目标: <span id="goalText" style="color:#5dade2"></span></div>
   </div>
   <div class="msg-area" id="msg"></div>
   <div class="bottom-bar">
@@ -198,13 +199,11 @@
     <div class="legend">
       <span style="color:#5e5">增益:</span>
       <span><span class="dot" style="background:#e84545"></span>变长</span>
-      <span><span class="dot" style="background:#5dade2"></span>扩大</span>
       <span><span class="dot" style="background:#f4d03f"></span>减速</span>
       <span><span class="dot" style="background:#ff6b9d"></span>+命</span>
       <span class="sepa">|</span>
       <span style="color:#e55">减益:</span>
       <span><span class="dot" style="background:#8b0000"></span>缩短</span>
-      <span><span class="dot" style="background:#2c3e50"></span>缩小</span>
       <span><span class="dot" style="background:#e67e22"></span>加速</span>
       <span><span class="dot" style="background:#6c3483"></span>-命</span>
     </div>
@@ -246,24 +245,20 @@ const FOOD_LIFETIME = 160;
 const MAX_FOODS = 7;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
-const MIN_FIELD_SCALE = 0.6;
-const MAX_FIELD_SCALE = 1.5;
 const FOOD_DEF = {
-  grow:       { color: 0xe84545, label: '变长', weight: 34, good: true },
-  expand:     { color: 0x5dade2, label: '扩大', weight: 7,  good: true },
-  slow:       { color: 0xf4d03f, label: '减速', weight: 7,  good: true },
-  extraLife:  { color: 0xff6b9d, label: '+命',  weight: 3,  good: true },
-  shrink:     { color: 0x8b0000, label: '缩短', weight: 22, good: false },
-  shrinkField:{ color: 0x2c3e50, label: '缩小', weight: 7,  good: false },
-  speedUp:    { color: 0xe67e22, label: '加速', weight: 7,  good: false },
-  loseLife:   { color: 0x6c3483, label: '-命',  weight: 3,  good: false },
+  grow:      { color: 0xe84545, label: '变长', weight: 45, good: true },
+  slow:      { color: 0xf4d03f, label: '减速', weight: 9,  good: true },
+  extraLife: { color: 0xff6b9d, label: '+命',  weight: 4,  good: true },
+  shrink:    { color: 0x8b0000, label: '缩短', weight: 29, good: false },
+  speedUp:   { color: 0xe67e22, label: '加速', weight: 9,  good: false },
+  loseLife:  { color: 0x6c3483, label: '-命',  weight: 4,  good: false },
 };
 
 const urlParams = new URLSearchParams(location.search);
 const requestedMap = urlParams.get('map');
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
-const LOOP_WIN_MAPS = new Set(['torus', 'genus2', 'projective', 'klein']);
-const PI1_PANEL_MAPS = new Set(['genus2', 'projective', 'klein']);
+const LOOP_WIN_MAPS = new Set(['sphere', 'torus', 'genus2', 'projective', 'mobius', 'klein']);
+const PI1_PANEL_MAPS = new Set(['genus2', 'projective', 'mobius', 'klein']);
 const TORUS_CUT_X = GRID_SIZE / 2;
 const TORUS_CUT_Y = GRID_SIZE / 2;
 const KLEIN_CUT_A_X = GRID_SIZE / 2;
@@ -2134,6 +2129,7 @@ function invertTopologyWord(word) {
 
 function emptyTopologyState() {
   if (MAP_TYPE === 'torus') return { wx: 0, wy: 0 };
+  if (MAP_TYPE === 'mobius') return { w: 0, boundary: 0 };
   if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return { word: [] };
   return null;
 }
@@ -2141,6 +2137,7 @@ function emptyTopologyState() {
 function cloneTopologyState(state) {
   if (!state) return emptyTopologyState();
   if (MAP_TYPE === 'torus') return { wx: state.wx || 0, wy: state.wy || 0 };
+  if (MAP_TYPE === 'mobius') return { w: state.w || 0, boundary: state.boundary || 0 };
   if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return { word: [...(state.word || [])] };
   return null;
 }
@@ -2209,6 +2206,16 @@ function projectiveStepWord(from, moveDir) {
   return boundaryCrossingEdge(from, moveDir) ? ['a'] : [];
 }
 
+function mobiusStepDelta(from, moveDir) {
+  let w = 0;
+  let boundary = 0;
+  if (moveDir.dx === 1 && from.gx === GRID_SIZE - 1) w = 1;
+  if (moveDir.dx === -1 && from.gx === 0) w = -1;
+  if (moveDir.dy === 1 && from.gy === GRID_SIZE - 1) boundary = 1;
+  if (moveDir.dy === -1 && from.gy === 0) boundary = 1;
+  return { w, boundary };
+}
+
 function kleinStepCrossing(from, moveDir) {
   if (moveDir.dx === 1 && (from.gx + 1) % GRID_SIZE === KLEIN_CUT_A_X) {
     return { label: 'a', letter: 'a', cut: `u=${KLEIN_CUT_A_X}/N` };
@@ -2248,6 +2255,13 @@ function advanceTopologyState(state, from, moveDir) {
   if (MAP_TYPE === 'projective') {
     return {
       word: reduceProjectiveWord([...current.word, ...projectiveStepWord(from, moveDir)]),
+    };
+  }
+  if (MAP_TYPE === 'mobius') {
+    const delta = mobiusStepDelta(from, moveDir);
+    return {
+      w: current.w + delta.w,
+      boundary: current.boundary + delta.boundary,
     };
   }
   if (MAP_TYPE === 'klein') {
@@ -2315,6 +2329,13 @@ function torusStateFormula(state) {
   return [powerTerm('a', wx), powerTerm('b', wy)].filter(Boolean).join(' ') || '1';
 }
 
+function mobiusStateFormula(state) {
+  const w = state?.w || 0;
+  const boundary = state?.boundary || 0;
+  const loop = powerTerm('a', w) || '1';
+  return boundary > 0 ? `${loop}; 跨边界×${boundary}` : loop;
+}
+
 function kleinNormalFormula(word) {
   const normal = kleinNormalFormFromWord(word || []);
   return [powerTerm('a', normal.a), powerTerm('b', normal.b)].filter(Boolean).join(' ') || '1';
@@ -2327,6 +2348,7 @@ function topologyWordFormula(word) {
 
 function topologyStateFormula(state) {
   if (MAP_TYPE === 'torus') return torusStateFormula(state);
+  if (MAP_TYPE === 'mobius') return mobiusStateFormula(state);
   if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return topologyWordFormula(state?.word || []);
   return '1';
 }
@@ -2335,6 +2357,7 @@ function topologyRelationFormula() {
   if (MAP_TYPE === 'torus') return 'abAB = 1';
   if (MAP_TYPE === 'genus2') return `${GENUS2_RELATOR.join('')} = 1`;
   if (MAP_TYPE === 'projective') return `${PROJECTIVE_RELATOR.join('')} = 1`;
+  if (MAP_TYPE === 'mobius') return 'π1 = <a> ≅ Z；不跨边界';
   if (MAP_TYPE === 'klein') return `${KLEIN_RELATOR.join('')} = 1`;
   return '-';
 }
@@ -2421,6 +2444,38 @@ function describeProjectiveMove(from, moveDir) {
   };
 }
 
+function describeMobiusMove(from, moveDir) {
+  const delta = mobiusStepDelta(from, moveDir);
+  const before = mobiusStateFormula(from.topo);
+  const afterState = {
+    w: (from.topo?.w || 0) + delta.w,
+    boundary: (from.topo?.boundary || 0) + delta.boundary,
+  };
+  if (delta.boundary > 0) {
+    return {
+      step: '跨过带边界',
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '边界',
+      det: `${before} -> ${mobiusStateFormula(afterState)}；该闭合不计胜利`,
+    };
+  }
+  if (delta.w === 0) {
+    return {
+      step: '未穿过 cut',
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const letter = delta.w > 0 ? 'a' : 'A';
+  return {
+    step: `cut a -> ${letter}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: 'u 粘边',
+    det: `${before}·${letter} = ${mobiusStateFormula(afterState)}`,
+  };
+}
+
 function describeKleinMove(from, moveDir) {
   const crossing = kleinStepCrossing(from, moveDir);
   if (!crossing) {
@@ -2447,11 +2502,21 @@ function describeTopologyMove(from, moveDir) {
   if (MAP_TYPE === 'torus') return describeTorusMove(from, moveDir);
   if (MAP_TYPE === 'genus2') return describeGenus2Move(from, moveDir);
   if (MAP_TYPE === 'projective') return describeProjectiveMove(from, moveDir);
+  if (MAP_TYPE === 'mobius') return describeMobiusMove(from, moveDir);
   if (MAP_TYPE === 'klein') return describeKleinMove(from, moveDir);
   return null;
 }
 
 function topologyDifferenceInfo(fromTopo, toTopo) {
+  if (MAP_TYPE === 'sphere') {
+    return {
+      nontrivial: true,
+      label: '任意闭合环路',
+      reducedLabel: '任意闭合环路',
+      winText: '胜利！形成闭合环路',
+    };
+  }
+
   if (MAP_TYPE === 'torus') {
     const wx = (toTopo?.wx || 0) - (fromTopo?.wx || 0);
     const wy = (toTopo?.wy || 0) - (fromTopo?.wy || 0);
@@ -2459,6 +2524,18 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
       nontrivial: wx !== 0 || wy !== 0,
       label: torusStateFormula({ wx, wy }),
       reducedLabel: torusStateFormula({ wx, wy }),
+    };
+  }
+
+  if (MAP_TYPE === 'mobius') {
+    const w = (toTopo?.w || 0) - (fromTopo?.w || 0);
+    const boundary = (toTopo?.boundary || 0) - (fromTopo?.boundary || 0);
+    const crossesBoundary = boundary > 0;
+    return {
+      nontrivial: w !== 0 && !crossesBoundary,
+      label: mobiusStateFormula({ w, boundary }),
+      reducedLabel: mobiusStateFormula({ w, boundary }),
+      failLabel: crossesBoundary ? '闭合环路跨过边界，不计胜利' : '平凡闭合，尾部被切掉',
     };
   }
 
@@ -2618,6 +2695,16 @@ function speedLabel() {
   return '很慢';
 }
 
+function victoryGoalText() {
+  if (MAP_TYPE === 'sphere') return '形成衔尾蛇：任意闭合环路';
+  if (MAP_TYPE === 'torus') return '形成衔尾蛇：非平凡环路';
+  if (MAP_TYPE === 'genus2') return '形成衔尾蛇：非平凡同伦类';
+  if (MAP_TYPE === 'projective') return '形成衔尾蛇：非平凡环路';
+  if (MAP_TYPE === 'mobius') return '形成衔尾蛇：不跨边界的非平凡环路';
+  if (MAP_TYPE === 'klein') return '形成衔尾蛇：非平凡环路';
+  return '普通贪吃蛇';
+}
+
 function updateUI() {
   document.getElementById('score').textContent = score;
   document.getElementById('best').textContent = best;
@@ -2625,6 +2712,7 @@ function updateUI() {
   for (let i = 0; i < lives; i++) hearts.push('❤');
   document.getElementById('lives').textContent = hearts.join(' ') || '💀';
   document.getElementById('speedLabel').textContent = speedLabel();
+  document.getElementById('goalText').textContent = victoryGoalText();
   document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
   document.getElementById('pauseBtn').textContent = paused ? '继续' : '暂停';
 }
@@ -2712,13 +2800,6 @@ function applyEffect(type) {
       }
       addMsg('变长 +1', 'good');
       break;
-    case 'expand':
-      if (fieldScale < MAX_FIELD_SCALE) {
-        fieldScale = Math.min(MAX_FIELD_SCALE, fieldScale + 0.08);
-        ensureSurfaceGeometry();
-        addMsg('场地扩大！', 'good');
-      } else { addMsg('场地已达最大', 'warn'); }
-      break;
     case 'slow':
       speed = Math.min(speed + 30, 250);
       restartLoop();
@@ -2732,13 +2813,6 @@ function applyEffect(type) {
       if (snake.length > 2) { snake.pop(); snake.pop(); }
       else if (snake.length > 1) { snake.pop(); }
       addMsg('身体缩短！', 'warn');
-      break;
-    case 'shrinkField':
-      if (fieldScale > MIN_FIELD_SCALE) {
-        fieldScale = Math.max(MIN_FIELD_SCALE, fieldScale - 0.08);
-        ensureSurfaceGeometry();
-        addMsg('场地缩小！', 'warn');
-      } else { addMsg('场地已到最小', 'warn'); }
       break;
     case 'speedUp':
       speed = Math.max(speed - 30, 40);
@@ -2776,7 +2850,7 @@ function die(reason = '撞到自己！') {
 
 function winByLoop(info) {
   running = false;
-  const text = `胜利！闭合为非平凡回路 ${info.label}`;
+  const text = info.winText || `胜利！闭合为非平凡回路 ${info.label}`;
   setMsg(text, 'good');
   addMsg(text, 'good');
 }
@@ -2852,7 +2926,7 @@ function gameTick() {
     }
 
     if (closure) {
-      addMsg('平凡闭合，尾部被切掉', 'warn');
+      addMsg(closure.failLabel || '平凡闭合，尾部被切掉', 'warn');
     } else {
       addMsg('撞断身体！保留前 ' + snake.length + ' 节', 'warn');
     }
