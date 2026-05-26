@@ -224,8 +224,8 @@
   <div class="pi1-row"><span class="pi1-key">关系</span><span class="pi1-val" id="pi1Rel">-</span></div>
   <div class="pi1-row"><span class="pi1-key">上一步</span><span class="pi1-val" id="pi1Step">-</span></div>
   <div class="pi1-row"><span class="pi1-key">dx,dy</span><span class="pi1-val" id="pi1Move">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">tx,ty</span><span class="pi1-val" id="pi1Cut">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">det</span><span class="pi1-val" id="pi1Det">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">cut/边</span><span class="pi1-val" id="pi1Cut">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">公式</span><span class="pi1-val" id="pi1Det">-</span></div>
   <div class="pi1-row"><span class="pi1-key">头词</span><span class="pi1-val" id="pi1Head">1</span></div>
   <div class="pi1-row"><span class="pi1-key">尾词</span><span class="pi1-val" id="pi1Tail">1</span></div>
   <div class="pi1-row"><span class="pi1-key">体词</span><span class="pi1-val" id="pi1Body">1</span></div>
@@ -262,9 +262,12 @@ const FOOD_DEF = {
 const urlParams = new URLSearchParams(location.search);
 const requestedMap = urlParams.get('map');
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
-const LOOP_WIN_MAPS = new Set(['torus', 'genus2']);
+const LOOP_WIN_MAPS = new Set(['torus', 'genus2', 'projective', 'klein']);
+const PI1_PANEL_MAPS = new Set(['genus2', 'projective', 'klein']);
 const TORUS_CUT_X = GRID_SIZE / 2;
 const TORUS_CUT_Y = GRID_SIZE / 2;
+const KLEIN_CUT_A_X = GRID_SIZE / 2;
+const KLEIN_CUT_B_Y = GRID_SIZE / 4;
 const CUT_COLORS = {
   a: '#ff5c8a',
   b: '#48d9ff',
@@ -272,6 +275,8 @@ const CUT_COLORS = {
   d: '#ffd166',
 };
 const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'd', 'b', 'D', 'B'];
+const PROJECTIVE_RELATOR = ['a', 'a'];
+const KLEIN_RELATOR = ['a', 'b', 'A', 'b'];
 
 /* ===========================
    TORUS MESH
@@ -1449,6 +1454,44 @@ function drawTorusCutMarks(ctx) {
   ctx.restore();
 }
 
+function drawProjectiveCutMarks(ctx) {
+  if (MAP_TYPE !== 'projective') return;
+  const size = TEX_SIZE;
+  const px = TEX_SIZE / GRID_SIZE;
+  ctx.save();
+  ctx.globalAlpha = 0.96;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = CUT_COLORS.a;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, size - 6, size - 6);
+  drawCutLabel(ctx, 'a', size / 2, px * 0.55, CUT_COLORS.a, px * 0.34);
+  drawCutLabel(ctx, 'a', size / 2, size - px * 0.55, CUT_COLORS.a, px * 0.34);
+  drawCutLabel(ctx, 'a', px * 0.55, size / 2, CUT_COLORS.a, px * 0.34);
+  drawCutLabel(ctx, 'a', size - px * 0.55, size / 2, CUT_COLORS.a, px * 0.34);
+  ctx.restore();
+}
+
+function drawKleinCutMarks(ctx) {
+  if (MAP_TYPE !== 'klein') return;
+  const size = TEX_SIZE;
+  const px = TEX_SIZE / GRID_SIZE;
+  const x = KLEIN_CUT_A_X * px;
+  const y = KLEIN_CUT_B_Y * px;
+  ctx.save();
+  ctx.globalAlpha = 0.96;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 6;
+
+  ctx.strokeStyle = CUT_COLORS.a;
+  ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.stroke();
+  drawCutLabel(ctx, 'a', x, px * 0.75, CUT_COLORS.a, px * 0.34);
+
+  ctx.strokeStyle = CUT_COLORS.b;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.stroke();
+  drawCutLabel(ctx, 'b', px * 0.75, y, CUT_COLORS.b, px * 0.34);
+  ctx.restore();
+}
+
 function drawGenus2CutMark(ctx, cut) {
   const px = GENUS2_FACE_TEX_SIZE / GENUS2_PATCH_CELLS;
   let x1, y1, x2, y2;
@@ -1487,6 +1530,9 @@ function drawGenus2CutMark(ctx, cut) {
 
 function drawTopologyCutMarks() {
   drawTorusCutMarks(markCtxFront);
+  drawProjectiveCutMarks(markCtxFront);
+  drawKleinCutMarks(markCtxFront);
+  drawKleinCutMarks(markCtxBack);
 }
 
 function redrawTexture() {
@@ -1642,6 +1688,25 @@ function makeCutTube(points, color, radius, closed = false) {
   return mesh;
 }
 
+function makeCutPolylineTube(points, color, radius, depthTest = false) {
+  if (points.length < 2) return new THREE.Group();
+  const path = new THREE.CurvePath();
+  for (let i = 1; i < points.length; i++) {
+    path.add(new THREE.LineCurve3(points[i - 1], points[i]));
+  }
+  const geometry = new THREE.TubeGeometry(path, Math.max(8, points.length * 2), radius * fieldScale, 10, false);
+  const material = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity: 0.98,
+    depthWrite: false,
+    depthTest,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 4;
+  return mesh;
+}
+
 function makeCutLabelSprite(label, color, scale) {
   const canvas = document.createElement('canvas');
   const size = 96;
@@ -1675,6 +1740,51 @@ function makeCutLabelSprite(label, color, scale) {
   return sprite;
 }
 
+function sampleParametricLoop(pointFn, count, uvAt) {
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const uv = uvAt(i / count);
+    points.push(pointFn(uv.u, uv.v));
+  }
+  return points;
+}
+
+function sampleParametricPath(pointFn, segments, uvAt) {
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const uv = uvAt(i / segments);
+    points.push(pointFn(uv.u, uv.v));
+  }
+  return points;
+}
+
+function projectiveBoundaryOverlayPoints() {
+  return sampleParametricLoop(projectivePointUV, 96, t => {
+    const q = t * 4;
+    if (q < 1) return { u: q, v: 0 };
+    if (q < 2) return { u: 1, v: q - 1 };
+    if (q < 3) return { u: 3 - q, v: 1 };
+    return { u: 0, v: 4 - q };
+  });
+}
+
+function kleinCutOverlayPaths() {
+  const uA = KLEIN_CUT_A_X / GRID_SIZE;
+  const vB = KLEIN_CUT_B_Y / GRID_SIZE;
+  return [
+    {
+      label: 'a',
+      color: CUT_COLORS.a,
+      points: sampleParametricPath(kleinPointUV, 128, t => ({ u: uA, v: t })),
+    },
+    {
+      label: 'b',
+      color: CUT_COLORS.b,
+      points: sampleParametricPath(kleinPointUV, 160, t => ({ u: t, v: vB })),
+    },
+  ];
+}
+
 function createCutOverlayGroup() {
   if (!LOOP_WIN_MAPS.has(MAP_TYPE)) return null;
   const group = new THREE.Group();
@@ -1687,6 +1797,20 @@ function createCutOverlayGroup() {
       group.add(makeCutTube(loop.points, loop.color, 0.014, false));
       const sprite = makeCutLabelSprite(loop.label, loop.color, 0.13);
       const labelPoint = loop.points[Math.floor(loop.points.length / 2)] || loop.points[0];
+      sprite.position.copy(labelPoint);
+      group.add(sprite);
+    }
+  } else if (MAP_TYPE === 'projective') {
+    const points = projectiveBoundaryOverlayPoints();
+    group.add(makeCutTube(points, CUT_COLORS.a, 0.012, true));
+    const sprite = makeCutLabelSprite('a', CUT_COLORS.a, 0.13);
+    sprite.position.copy(points[Math.floor(points.length * 0.12)] || points[0]);
+    group.add(sprite);
+  } else if (MAP_TYPE === 'klein') {
+    for (const path of kleinCutOverlayPaths()) {
+      group.add(makeCutPolylineTube(path.points, path.color, 0.012, false));
+      const sprite = makeCutLabelSprite(path.label, path.color, 0.13);
+      const labelPoint = path.points[Math.floor(path.points.length / 3)] || path.points[0];
       sprite.position.copy(labelPoint);
       group.add(sprite);
     }
@@ -1953,16 +2077,71 @@ function reduceGenus2Word(word) {
   return current;
 }
 
+function reduceProjectiveWord(word) {
+  const count = word.filter(letter => letter.toLowerCase() === 'a').length;
+  return count % 2 === 1 ? ['a'] : [];
+}
+
+function repeatSignedLetter(label, exponent) {
+  const n = Math.abs(exponent);
+  const letter = exponent >= 0 ? label : label.toUpperCase();
+  return Array.from({ length: n }, () => letter);
+}
+
+function kleinNormalFormFromWord(word) {
+  let a = 0;
+  let b = 0;
+  for (const letter of word) {
+    if (letter === 'a') {
+      a += 1;
+      b = -b;
+    } else if (letter === 'A') {
+      a -= 1;
+      b = -b;
+    } else if (letter === 'b') {
+      b += 1;
+    } else if (letter === 'B') {
+      b -= 1;
+    }
+  }
+  return { a, b };
+}
+
+function kleinWordFromNormal(normal) {
+  return [
+    ...repeatSignedLetter('a', normal.a),
+    ...repeatSignedLetter('b', normal.b),
+  ];
+}
+
+function reduceKleinWord(word) {
+  return kleinWordFromNormal(kleinNormalFormFromWord(word));
+}
+
+function reduceTopologyWord(word) {
+  if (MAP_TYPE === 'genus2') return reduceGenus2Word(word);
+  if (MAP_TYPE === 'projective') return reduceProjectiveWord(word);
+  if (MAP_TYPE === 'klein') return reduceKleinWord(word);
+  return freeReduceWord(word);
+}
+
+function invertTopologyWord(word) {
+  if (MAP_TYPE === 'projective') {
+    return word.slice().reverse().map(() => 'a');
+  }
+  return invertWord(word);
+}
+
 function emptyTopologyState() {
   if (MAP_TYPE === 'torus') return { wx: 0, wy: 0 };
-  if (MAP_TYPE === 'genus2') return { word: [] };
+  if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return { word: [] };
   return null;
 }
 
 function cloneTopologyState(state) {
   if (!state) return emptyTopologyState();
   if (MAP_TYPE === 'torus') return { wx: state.wx || 0, wy: state.wy || 0 };
-  if (MAP_TYPE === 'genus2') return { word: [...(state.word || [])] };
+  if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return { word: [...(state.word || [])] };
   return null;
 }
 
@@ -2018,6 +2197,39 @@ function genus2StepWord(from, moveDir) {
   return crossing ? [crossing.letter] : [];
 }
 
+function boundaryCrossingEdge(from, moveDir) {
+  if (moveDir.dx === 1 && from.gx === GRID_SIZE - 1) return 'R';
+  if (moveDir.dx === -1 && from.gx === 0) return 'L';
+  if (moveDir.dy === 1 && from.gy === GRID_SIZE - 1) return 'D';
+  if (moveDir.dy === -1 && from.gy === 0) return 'U';
+  return null;
+}
+
+function projectiveStepWord(from, moveDir) {
+  return boundaryCrossingEdge(from, moveDir) ? ['a'] : [];
+}
+
+function kleinStepCrossing(from, moveDir) {
+  if (moveDir.dx === 1 && (from.gx + 1) % GRID_SIZE === KLEIN_CUT_A_X) {
+    return { label: 'a', letter: 'a', cut: `u=${KLEIN_CUT_A_X}/N` };
+  }
+  if (moveDir.dx === -1 && from.gx === KLEIN_CUT_A_X) {
+    return { label: 'a', letter: 'A', cut: `u=${KLEIN_CUT_A_X}/N` };
+  }
+  if (moveDir.dy === 1 && (from.gy + 1) % GRID_SIZE === KLEIN_CUT_B_Y) {
+    return { label: 'b', letter: 'b', cut: `v=${KLEIN_CUT_B_Y}/N` };
+  }
+  if (moveDir.dy === -1 && from.gy === KLEIN_CUT_B_Y) {
+    return { label: 'b', letter: 'B', cut: `v=${KLEIN_CUT_B_Y}/N` };
+  }
+  return null;
+}
+
+function kleinStepWord(from, moveDir) {
+  const crossing = kleinStepCrossing(from, moveDir);
+  return crossing ? [crossing.letter] : [];
+}
+
 function advanceTopologyState(state, from, moveDir) {
   if (!LOOP_WIN_MAPS.has(MAP_TYPE)) return null;
   const current = cloneTopologyState(state);
@@ -2031,6 +2243,16 @@ function advanceTopologyState(state, from, moveDir) {
   if (MAP_TYPE === 'genus2') {
     return {
       word: reduceGenus2Word([...current.word, ...genus2StepWord(from, moveDir)]),
+    };
+  }
+  if (MAP_TYPE === 'projective') {
+    return {
+      word: reduceProjectiveWord([...current.word, ...projectiveStepWord(from, moveDir)]),
+    };
+  }
+  if (MAP_TYPE === 'klein') {
+    return {
+      word: reduceKleinWord([...current.word, ...kleinStepWord(from, moveDir)]),
     };
   }
   return null;
@@ -2076,12 +2298,49 @@ function initializeSnakeTopology() {
   }));
 }
 
-function loopWordLabel(word) {
-  return word.length > 0 ? word.join('') : '1';
-}
-
 function wordFormula(word) {
   return word && word.length > 0 ? word.join('') : '1';
+}
+
+function powerTerm(label, exponent) {
+  if (exponent === 0) return '';
+  const base = exponent > 0 ? label : label.toUpperCase();
+  const n = Math.abs(exponent);
+  return n === 1 ? base : `${base}^${n}`;
+}
+
+function torusStateFormula(state) {
+  const wx = state?.wx || 0;
+  const wy = state?.wy || 0;
+  return [powerTerm('a', wx), powerTerm('b', wy)].filter(Boolean).join(' ') || '1';
+}
+
+function kleinNormalFormula(word) {
+  const normal = kleinNormalFormFromWord(word || []);
+  return [powerTerm('a', normal.a), powerTerm('b', normal.b)].filter(Boolean).join(' ') || '1';
+}
+
+function topologyWordFormula(word) {
+  if (MAP_TYPE === 'klein') return kleinNormalFormula(word);
+  return wordFormula(word);
+}
+
+function topologyStateFormula(state) {
+  if (MAP_TYPE === 'torus') return torusStateFormula(state);
+  if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return topologyWordFormula(state?.word || []);
+  return '1';
+}
+
+function topologyRelationFormula() {
+  if (MAP_TYPE === 'torus') return 'abAB = 1';
+  if (MAP_TYPE === 'genus2') return `${GENUS2_RELATOR.join('')} = 1`;
+  if (MAP_TYPE === 'projective') return `${PROJECTIVE_RELATOR.join('')} = 1`;
+  if (MAP_TYPE === 'klein') return `${KLEIN_RELATOR.join('')} = 1`;
+  return '-';
+}
+
+function loopWordLabel(word) {
+  return topologyWordFormula(word);
 }
 
 function setPi1Text(id, text, warn = false) {
@@ -2089,6 +2348,34 @@ function setPi1Text(id, text, warn = false) {
   if (!el) return;
   el.textContent = text;
   el.className = 'pi1-val' + (warn ? ' pi1-warn' : '');
+}
+
+function describeTorusMove(from, moveDir) {
+  const current = cloneTopologyState(from.topo);
+  const delta = torusStepDelta(from, moveDir);
+  const letters = [];
+  if (delta.wx > 0) letters.push('a');
+  if (delta.wx < 0) letters.push('A');
+  if (delta.wy > 0) letters.push('b');
+  if (delta.wy < 0) letters.push('B');
+  if (letters.length === 0) {
+    return {
+      step: '未穿过 cut',
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const next = {
+    wx: current.wx + delta.wx,
+    wy: current.wy + delta.wy,
+  };
+  return {
+    step: `cut ${letters.join('')} @ x=${TORUS_CUT_X}, y=${TORUS_CUT_Y}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: letters.map(letter => letter.toLowerCase()).join(','),
+    det: `${torusStateFormula(current)} · ${letters.join('')} = ${torusStateFormula(next)}`,
+  };
 }
 
 function describeGenus2Move(from, moveDir) {
@@ -2114,15 +2401,90 @@ function describeGenus2Move(from, moveDir) {
   };
 }
 
+function describeProjectiveMove(from, moveDir) {
+  const edge = boundaryCrossingEdge(from, moveDir);
+  if (!edge) {
+    return {
+      step: '未穿过边界 cut',
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const before = wordFormula(from.topo?.word || []);
+  const after = wordFormula(reduceProjectiveWord([...(from.topo?.word || []), 'a']));
+  return {
+    step: `边界 ${edge} -> a`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: `${edge} 边`,
+    det: `${before}·a -> ${after}, aa=1`,
+  };
+}
+
+function describeKleinMove(from, moveDir) {
+  const crossing = kleinStepCrossing(from, moveDir);
+  if (!crossing) {
+    return {
+      step: '未穿过 cut',
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const letter = crossing.letter;
+  const before = topologyWordFormula(from.topo?.word || []);
+  const nextWord = reduceKleinWord([...(from.topo?.word || []), letter]);
+  const cutName = crossing.label === 'a' ? 'a: u=1/2' : 'b: v=1/4';
+  return {
+    step: `cut ${crossing.label} -> ${letter}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: cutName,
+    det: `NF(${before}·${letter}) = ${kleinNormalFormula(nextWord)}`,
+  };
+}
+
+function describeTopologyMove(from, moveDir) {
+  if (MAP_TYPE === 'torus') return describeTorusMove(from, moveDir);
+  if (MAP_TYPE === 'genus2') return describeGenus2Move(from, moveDir);
+  if (MAP_TYPE === 'projective') return describeProjectiveMove(from, moveDir);
+  if (MAP_TYPE === 'klein') return describeKleinMove(from, moveDir);
+  return null;
+}
+
+function topologyDifferenceInfo(fromTopo, toTopo) {
+  if (MAP_TYPE === 'torus') {
+    const wx = (toTopo?.wx || 0) - (fromTopo?.wx || 0);
+    const wy = (toTopo?.wy || 0) - (fromTopo?.wy || 0);
+    return {
+      nontrivial: wx !== 0 || wy !== 0,
+      label: torusStateFormula({ wx, wy }),
+      reducedLabel: torusStateFormula({ wx, wy }),
+    };
+  }
+
+  const rawWord = [
+    ...invertTopologyWord(fromTopo?.word || []),
+    ...(toTopo?.word || []),
+  ];
+  const word = reduceTopologyWord(rawWord);
+  return {
+    nontrivial: word.length > 0,
+    label: loopWordLabel(word),
+    rawWord,
+    word,
+    reducedLabel: topologyWordFormula(word),
+  };
+}
+
 function updatePi1Panel() {
   const panel = document.getElementById('pi1-panel');
   if (!panel) return;
-  if (MAP_TYPE !== 'genus2') {
+  if (!PI1_PANEL_MAPS.has(MAP_TYPE)) {
     panel.style.display = 'none';
     return;
   }
   panel.style.display = 'block';
-  setPi1Text('pi1Rel', `${GENUS2_RELATOR.join('')} = 1`);
+  setPi1Text('pi1Rel', topologyRelationFormula());
 
   const head = snake[0];
   if (!head) return;
@@ -2138,14 +2500,11 @@ function updatePi1Panel() {
   setPi1Text('pi1Move', last.move);
   setPi1Text('pi1Cut', last.cut);
   setPi1Text('pi1Det', last.det);
-  setPi1Text('pi1Head', wordFormula(head.topo?.word));
-  setPi1Text('pi1Tail', wordFormula(tail.topo?.word));
+  setPi1Text('pi1Head', topologyStateFormula(head.topo));
+  setPi1Text('pi1Tail', topologyStateFormula(tail.topo));
 
-  const bodyWord = reduceGenus2Word([
-    ...invertWord(tail.topo?.word || []),
-    ...(head.topo?.word || []),
-  ]);
-  setPi1Text('pi1Body', `T^-1 H = ${wordFormula(bodyWord)}`);
+  const bodyInfo = topologyDifferenceInfo(tail.topo, head.topo);
+  setPi1Text('pi1Body', `T^-1 H = ${bodyInfo.reducedLabel}`);
 
   const dir = nextDir || direction;
   if (!dir) {
@@ -2163,48 +2522,21 @@ function updatePi1Panel() {
 
   const newTopo = advanceTopologyState(head.topo, head, dir);
   const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
-  const rawLoopWord = [
-    ...invertWord(hitTopo.word || []),
-    ...((newTopo && newTopo.word) || []),
-  ];
-  const loopWord = reduceGenus2Word(rawLoopWord);
+  const loopInfo = topologyDifferenceInfo(hitTopo, newTopo);
+  const loopFormula = loopInfo.rawWord
+    ? `${wordFormula(loopInfo.rawWord)} -> ${loopInfo.reducedLabel}`
+    : loopInfo.reducedLabel;
   setPi1Text(
     'pi1Close',
-    `S${hitSelfIdx}^-1 H' = ${wordFormula(rawLoopWord)} -> ${wordFormula(loopWord)} (${loopWord.length > 0 ? '非平凡' : '平凡'})`,
-    loopWord.length === 0,
+    `S${hitSelfIdx}^-1 H' = ${loopFormula} (${loopInfo.nontrivial ? '非平凡' : '平凡'})`,
+    !loopInfo.nontrivial,
   );
-}
-
-function genus2ClosureInfo(newTopo, hitSelfIdx) {
-  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
-  const word = reduceGenus2Word([
-    ...invertWord(hitTopo.word || []),
-    ...((newTopo && newTopo.word) || []),
-  ]);
-  return {
-    nontrivial: word.length > 0,
-    label: loopWordLabel(word),
-  };
 }
 
 function selfClosureInfo(newTopo, hitSelfIdx) {
   if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return null;
   const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
-  if (MAP_TYPE === 'torus') {
-    const wx = (newTopo?.wx || 0) - hitTopo.wx;
-    const wy = (newTopo?.wy || 0) - hitTopo.wy;
-    const parts = [];
-    if (wx !== 0) parts.push(`a:${wx}`);
-    if (wy !== 0) parts.push(`b:${wy}`);
-    return {
-      nontrivial: wx !== 0 || wy !== 0,
-      label: parts.join(' ') || '1',
-    };
-  }
-  if (MAP_TYPE === 'genus2') {
-    return genus2ClosureInfo(newTopo, hitSelfIdx);
-  }
-  return null;
+  return topologyDifferenceInfo(hitTopo, newTopo);
 }
 
 function buildInitialSnake(head, length) {
@@ -2444,7 +2776,7 @@ function die(reason = '撞到自己！') {
 
 function winByLoop(info) {
   running = false;
-  const text = `胜利！首尾闭合为非平凡回路 ${info.label}`;
+  const text = `胜利！闭合为非平凡回路 ${info.label}`;
   setMsg(text, 'good');
   addMsg(text, 'good');
 }
@@ -2505,8 +2837,8 @@ function gameTick() {
     face: newFace,
     topo: advanceTopologyState(head.topo, head, moveDir),
   };
-  if (MAP_TYPE === 'genus2') {
-    pi1LastStep = describeGenus2Move(head, moveDir);
+  if (LOOP_WIN_MAPS.has(MAP_TYPE)) {
+    pi1LastStep = describeTopologyMove(head, moveDir);
   }
 
   const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
