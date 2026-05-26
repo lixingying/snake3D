@@ -214,6 +214,7 @@
     <div class="btn-row">
       <button id="restart">Restart</button>
       <button class="btn2" id="pauseBtn">Pause</button>
+      <button class="btn2" id="topologyHintsBtn">Hints</button>
       <button class="btn2" id="resetCam">Reset Camera</button>
     </div>
     <div class="legend">
@@ -258,7 +259,15 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 /* ===========================
    CONSTANTS
    =========================== */
-const GRID_SIZE = 20;
+const urlParams = new URLSearchParams(location.search);
+const requestedMap = urlParams.get('map');
+const requestedLang = urlParams.get('lang') || localStorage.getItem('snake3dLang') || 'en';
+const LANG = requestedLang === 'zh' ? 'zh' : 'en';
+localStorage.setItem('snake3dLang', LANG);
+document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+
+const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
+const GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
 const INITIAL_SNAKE_LENGTH = 3;
 const SPAWN_INTERVAL = 24;
 const FOOD_LIFETIME = 220;
@@ -276,15 +285,9 @@ const FOOD_DEF = {
   loseLife:  { color: 0x8e44ad, weight: 4,  good: false },
 };
 
-const urlParams = new URLSearchParams(location.search);
-const requestedMap = urlParams.get('map');
-const requestedLang = urlParams.get('lang') || localStorage.getItem('snake3dLang') || 'en';
-const LANG = requestedLang === 'zh' ? 'zh' : 'en';
-localStorage.setItem('snake3dLang', LANG);
-document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
-
 const TEXT = {
   en: {
+    appTitle: 'Snake on Surfaces',
     score: 'Score',
     best: 'Best',
     lives: 'Lives',
@@ -293,6 +296,8 @@ const TEXT = {
     pause: 'Pause',
     resume: 'Resume',
     resetCamera: 'Reset Camera',
+    showHints: 'Hints',
+    hideHints: 'Hide Hints',
     paused: 'Paused',
     buffs: 'Buffs:',
     debuffs: 'Debuffs:',
@@ -354,6 +359,7 @@ const TEXT = {
     bodyCut: 'Body cut; kept {n} segments',
   },
   zh: {
+    appTitle: '蛇蛇教你学拓扑',
     score: '分数',
     best: '最高分',
     lives: '生命',
@@ -362,6 +368,8 @@ const TEXT = {
     pause: '暂停',
     resume: '继续',
     resetCamera: '重置视角',
+    showHints: '提示',
+    hideHints: '隐藏提示',
     paused: '暂停中',
     buffs: '增益:',
     debuffs: '减益:',
@@ -430,9 +438,8 @@ function tr(key, vars = {}) {
   return value.replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? '');
 }
 
-const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
 const LOOP_WIN_MAPS = new Set(['sphere', 'torus', 'genus2', 'projective', 'mobius', 'klein']);
-const PI1_PANEL_MAPS = new Set(['genus2', 'projective', 'mobius', 'klein']);
+const PI1_PANEL_MAPS = new Set(['torus', 'genus2', 'projective', 'mobius', 'klein']);
 const TORUS_CUT_X = GRID_SIZE / 2;
 const TORUS_CUT_Y = GRID_SIZE / 2;
 const KLEIN_CUT_A_X = GRID_SIZE / 2;
@@ -453,12 +460,14 @@ function setText(id, text) {
 }
 
 function applyStaticText() {
+  document.title = tr('appTitle');
   setText('scoreLabel', tr('score'));
   setText('bestLabel', tr('best'));
   setText('livesLabel', tr('lives'));
   setText('goalLabel', tr('goal'));
   setText('restart', tr('restart'));
   setText('resetCam', tr('resetCamera'));
+  setText('topologyHintsBtn', topologyHintsVisible ? tr('hideHints') : tr('showHints'));
   setText('pauseOverlay', tr('paused'));
   setText('buffLabel', tr('buffs'));
   setText('debuffLabel', tr('debuffs'));
@@ -560,7 +569,10 @@ function ensureSurfaceGeometry() {
   }
 
   cutOverlayGroup = createCutOverlayGroup();
-  if (cutOverlayGroup) scene.add(cutOverlayGroup);
+  if (cutOverlayGroup) {
+    cutOverlayGroup.visible = topologyHintsVisible;
+    scene.add(cutOverlayGroup);
+  }
 }
 
 function getR() { return BASE_R * fieldScale; }
@@ -1605,9 +1617,8 @@ function drawSurfaceGrid(ctx, size) {
   ctx.strokeStyle = 'rgba(168,228,210,0.26)';
   ctx.lineWidth = 1;
   const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
-  const step = MAP_TYPE === 'mobius' ? 2 : 1;
   const px = size / gridSize;
-  for (let i = 0; i <= gridSize; i += step) {
+  for (let i = 0; i <= gridSize; i++) {
     const pos = i * px;
     ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
@@ -1727,6 +1738,7 @@ function drawGenus2CutMark(ctx, cut) {
 }
 
 function drawTopologyCutMarks() {
+  if (!topologyHintsVisible) return;
   drawTorusCutMarks(markCtxFront);
   drawProjectiveCutMarks(markCtxFront);
   drawKleinCutMarks(markCtxFront);
@@ -2760,7 +2772,7 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
 function updatePi1Panel() {
   const panel = document.getElementById('pi1-panel');
   if (!panel) return;
-  if (!PI1_PANEL_MAPS.has(MAP_TYPE)) {
+  if (!topologyHintsVisible || !PI1_PANEL_MAPS.has(MAP_TYPE)) {
     panel.style.display = 'none';
     return;
   }
@@ -2890,6 +2902,7 @@ let msgTimer = null;
 let tickStartTime = 0;
 let tickInterval = 100;
 let loop = null;
+let topologyHintsVisible = false;
 
 function victoryGoalText() {
   if (MAP_TYPE === 'sphere') return tr('goalSphere');
@@ -2910,6 +2923,7 @@ function updateUI() {
   document.getElementById('goalText').textContent = victoryGoalText();
   document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
   document.getElementById('pauseBtn').textContent = paused ? tr('resume') : tr('pause');
+  document.getElementById('topologyHintsBtn').textContent = topologyHintsVisible ? tr('hideHints') : tr('showHints');
 }
 
 function sameSnakeCell(a, gx, gy, side, face) {
@@ -2919,6 +2933,13 @@ function sameSnakeCell(a, gx, gy, side, face) {
 function togglePause() {
   if (!running) return;
   paused = !paused;
+  updateUI();
+}
+
+function toggleTopologyHints() {
+  topologyHintsVisible = !topologyHintsVisible;
+  if (cutOverlayGroup) cutOverlayGroup.visible = topologyHintsVisible;
+  updatePi1Panel();
   updateUI();
 }
 
@@ -3241,6 +3262,7 @@ document.getElementById('restart').addEventListener('click', () => {
 });
 
 document.getElementById('pauseBtn').addEventListener('click', togglePause);
+document.getElementById('topologyHintsBtn').addEventListener('click', toggleTopologyHints);
 document.getElementById('resetCam').addEventListener('click', resetCamera);
 
 /* ===========================

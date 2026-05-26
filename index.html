@@ -43,10 +43,10 @@
     margin-bottom: 32px;
   }
   .maps {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, 260px);
     gap: 24px;
     justify-content: center;
-    flex-wrap: wrap;
   }
   .map-card {
     width: 260px;
@@ -74,12 +74,19 @@
     letter-spacing: 2px;
     margin-bottom: 8px;
   }
+  @media (max-width: 880px) {
+    .maps { grid-template-columns: repeat(2, 260px); }
+  }
+  @media (max-width: 590px) {
+    body { align-items: flex-start; padding: 72px 0 28px; }
+    .maps { grid-template-columns: 260px; }
+  }
 </style>
 </head>
 <body>
 <button class="lang-toggle" id="langToggle">中文</button>
 <div class="container">
-  <h1>Snake on Surfaces</h1>
+  <h1 data-i18n="appName">Snake on Surfaces</h1>
   <div class="subtitle" data-i18n="subtitle">Choose a surface to start</div>
   <div class="maps">
     <a class="map-card" data-map="sphere" href="snake3d.html?map=sphere&lang=en">
@@ -94,13 +101,13 @@
       <div class="map-icon">∞</div>
       <div class="map-name" data-i18n="genus2">Genus 2</div>
     </a>
-    <a class="map-card" data-map="projective" href="snake3d.html?map=projective&lang=en">
-      <div class="map-icon">⊙</div>
-      <div class="map-name" data-i18n="projective">Projective Plane</div>
-    </a>
     <a class="map-card" data-map="mobius" href="snake3d.html?map=mobius&lang=en">
       <div class="map-icon">↻</div>
       <div class="map-name" data-i18n="mobius">Mobius Strip</div>
+    </a>
+    <a class="map-card" data-map="projective" href="snake3d.html?map=projective&lang=en">
+      <div class="map-icon">⊙</div>
+      <div class="map-name" data-i18n="projective">Projective Plane</div>
     </a>
     <a class="map-card" data-map="klein" href="snake3d.html?map=klein&lang=en">
       <div class="map-icon">♾</div>
@@ -112,6 +119,7 @@
 const I18N = {
   en: {
     title: 'Snake on Surfaces — Choose a Surface',
+    appName: 'Snake on Surfaces',
     toggle: '中文',
     subtitle: 'Choose a surface to start',
     sphere: 'Sphere',
@@ -122,7 +130,8 @@ const I18N = {
     klein: 'Klein Bottle',
   },
   zh: {
-    title: 'Snake on Surfaces — 选择地图',
+    title: '蛇蛇教你学拓扑 — 选择地图',
+    appName: '蛇蛇教你学拓扑',
     toggle: 'English',
     subtitle: '选择地图开始游戏',
     sphere: '球 面',
