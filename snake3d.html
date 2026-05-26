@@ -59,7 +59,6 @@
   }
   .goal-line span { font-weight: bold; }
   #goalText { color: #5dade2; }
-  .life { color: #ff6b9d; }
   .msg-area {
     text-align: center;
     font-size: 0.9rem;
@@ -205,7 +204,6 @@
     <div class="top-bar">
       <div><span id="scoreLabel">Score</span>: <span id="score" style="color:#f0a500">0</span></div>
       <div><span id="bestLabel">Best</span>: <span id="best" style="color:#f0a500">0</span></div>
-      <div><span id="livesLabel">Lives</span>: <span class="life" id="lives">❤ ❤ ❤</span></div>
     </div>
     <div class="goal-line"><span id="goalLabel">Goal</span>: <span id="goalText"></span></div>
   </div>
@@ -218,15 +216,11 @@
       <button class="btn2" id="resetCam">Reset Camera</button>
     </div>
     <div class="legend">
-      <span id="buffLabel" style="color:#5e5">Buffs:</span>
+      <span id="foodLabel" style="color:#5e5">Food:</span>
       <span><span class="dot" style="background:#2ecc71"></span><span id="growLabel">Grow</span></span>
       <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
-      <span><span class="dot" style="background:#ff6b9d"></span><span id="extraLifeLabel">+Life</span></span>
-      <span class="sepa">|</span>
-      <span id="debuffLabel" style="color:#e55">Debuffs:</span>
       <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
       <span><span class="dot" style="background:#f39c12"></span><span id="speedUpLabel">Speed Up</span></span>
-      <span><span class="dot" style="background:#8e44ad"></span><span id="loseLifeLabel">-Life</span></span>
     </div>
     <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -276,12 +270,10 @@ const MAX_FOODS = 9;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
 const FOOD_DEF = {
-  grow:      { color: 0x2ecc71, weight: 48, good: true },
-  slow:      { color: 0x3498db, weight: 8,  good: true },
-  extraLife: { color: 0xff6b9d, weight: 4,  good: true },
-  shrink:    { color: 0xc0392b, weight: 28, good: false },
-  speedUp:   { color: 0xf39c12, weight: 8,  good: false },
-  loseLife:  { color: 0x8e44ad, weight: 4,  good: false },
+  grow:    { color: 0x2ecc71, weight: 52 },
+  slow:    { color: 0x3498db, weight: 12 },
+  shrink:  { color: 0xc0392b, weight: 24 },
+  speedUp: { color: 0xf39c12, weight: 12 },
 };
 
 const TEXT = {
@@ -289,7 +281,6 @@ const TEXT = {
     appTitle: 'Snake on Surfaces',
     score: 'Score',
     best: 'Best',
-    lives: 'Lives',
     goal: 'Goal',
     restart: 'Restart',
     pause: 'Pause',
@@ -298,14 +289,11 @@ const TEXT = {
     showHints: 'Hints',
     hideHints: 'Hide Hints',
     paused: 'Paused',
-    buffs: 'Buffs:',
-    debuffs: 'Debuffs:',
+    food: 'Food:',
     grow: 'Grow',
     slow: 'Slow',
-    extraLife: '+Life',
     shrink: 'Shrink',
     speedUp: 'Speed Up',
-    loseLife: '-Life',
     tip: 'Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
     localMap: 'Chart',
     pi1Title: 'π1 Calculation',
@@ -317,12 +305,12 @@ const TEXT = {
     pi1Tail: 'Tail word',
     pi1Body: 'Body word',
     pi1Close: 'Closure',
-    goalSphere: 'Close the snake into any loop',
-    goalTorus: 'Close the snake into a nontrivial loop',
-    goalGenus2: 'Close the snake into a nontrivial loop',
-    goalProjective: 'Close the snake into a nontrivial loop',
-    goalMobius: 'Close the snake into a nontrivial loop without crossing the boundary',
-    goalKlein: 'Close the snake into a nontrivial loop',
+    goalSphere: 'Ouroboros: any closed loop',
+    goalTorus: 'Ouroboros: nontrivial loop',
+    goalGenus2: 'Ouroboros: nontrivial loop',
+    goalProjective: 'Ouroboros: nontrivial loop',
+    goalMobius: 'Ouroboros: nontrivial loop without crossing the boundary',
+    goalKlein: 'Ouroboros: nontrivial loop',
     goalDefault: 'Classic snake',
     noBoundaryCross: 'no boundary crossing',
     crossedBoundary: 'cross boundary x{n}',
@@ -332,8 +320,8 @@ const TEXT = {
     boundaryEdge: '{edge} edge',
     bandBoundary: 'strip boundary',
     closedLoopAny: 'any closed loop',
-    winClosed: 'Win! Closed into a loop',
-    winNontrivial: 'Win! Closed into a nontrivial loop: {label}',
+    winClosed: 'Win! Ouroboros: closed loop',
+    winNontrivial: 'Win! Ouroboros: nontrivial loop {label}',
     failBoundary: 'Closed loop crossed the boundary; no win',
     failTrivial: 'Trivial loop; tail cut off',
     notMoved: 'not moved yet',
@@ -347,21 +335,16 @@ const TEXT = {
     glueEdgeU: 'u glued edge',
     gameOver: 'Game over!',
     hitBoundary: 'Hit the boundary!',
-    hitSelf: 'Hit yourself!',
-    livesLeft: '{n} lives left',
     grew: 'Grew +1',
     slowed: 'Slowed down',
-    extraLifeMsg: '+1 life',
     shortened: 'Shortened',
     spedUp: 'Sped up',
-    lostLife: '-1 life! {n} lives left',
     bodyCut: 'Body cut; kept {n} segments',
   },
   zh: {
     appTitle: '蛇蛇教你学拓扑',
     score: '分数',
     best: '最高分',
-    lives: '生命',
     goal: '目标',
     restart: '重新开始',
     pause: '暂停',
@@ -370,14 +353,11 @@ const TEXT = {
     showHints: '提示',
     hideHints: '隐藏提示',
     paused: '暂停中',
-    buffs: '增益:',
-    debuffs: '减益:',
+    food: '食物:',
     grow: '变长',
     slow: '减速',
-    extraLife: '+命',
     shrink: '缩短',
     speedUp: '加速',
-    loseLife: '-命',
     tip: '方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角',
     localMap: '局部地图',
     pi1Title: 'π1 计算',
@@ -404,8 +384,8 @@ const TEXT = {
     boundaryEdge: '{edge} 边',
     bandBoundary: '边界',
     closedLoopAny: '任意闭合环路',
-    winClosed: '胜利！形成闭合环路',
-    winNontrivial: '胜利！闭合为非平凡回路 {label}',
+    winClosed: '胜利！形成衔尾蛇：闭合环路',
+    winNontrivial: '胜利！形成衔尾蛇：非平凡回路 {label}',
     failBoundary: '闭合环路跨过边界，不计胜利',
     failTrivial: '平凡闭合，尾部被切掉',
     notMoved: '尚未移动',
@@ -419,14 +399,10 @@ const TEXT = {
     glueEdgeU: 'u 粘边',
     gameOver: '游戏结束！',
     hitBoundary: '撞到边界！',
-    hitSelf: '撞到自己！',
-    livesLeft: '剩余 {n} 条命',
     grew: '变长 +1',
     slowed: '减速！',
-    extraLifeMsg: '+1 生命',
     shortened: '身体缩短！',
     spedUp: '加速！',
-    lostLife: '-1 生命！剩余 {n} 条',
     bodyCut: '撞断身体！保留前 {n} 节',
   },
 };
@@ -462,20 +438,16 @@ function applyStaticText() {
   document.title = tr('appTitle');
   setText('scoreLabel', tr('score'));
   setText('bestLabel', tr('best'));
-  setText('livesLabel', tr('lives'));
   setText('goalLabel', tr('goal'));
   setText('restart', tr('restart'));
   setText('resetCam', tr('resetCamera'));
   setText('topologyHintsBtn', topologyHintsVisible ? tr('hideHints') : tr('showHints'));
   setText('pauseOverlay', tr('paused'));
-  setText('buffLabel', tr('buffs'));
-  setText('debuffLabel', tr('debuffs'));
+  setText('foodLabel', tr('food'));
   setText('growLabel', tr('grow'));
   setText('slowLabel', tr('slow'));
-  setText('extraLifeLabel', tr('extraLife'));
   setText('shrinkLabel', tr('shrink'));
   setText('speedUpLabel', tr('speedUp'));
-  setText('loseLifeLabel', tr('loseLife'));
   setText('tipText', tr('tip'));
   setText('mapTitle', tr('localMap'));
   setText('pi1Title', tr('pi1Title'));
@@ -1590,12 +1562,12 @@ function drawFoodMark(ctx, f) {
   const { x: cx, y: cy } = cellCenter(f.gx, f.gy, f.face);
   const px = textureCellPx();
   const def = FOOD_DEF[f.type];
-  const lifeLeft = 1 - f.age / FOOD_LIFETIME;
+  const ageLeft = 1 - f.age / FOOD_LIFETIME;
   const time = performance.now() / 1000;
   const pulse = 0.82 + 0.18 * Math.sin(time * 4 + f.gx * 2.5 + f.gy * 3.1);
   const pad = Math.max(1.5, px * 0.10);
   ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
-  ctx.globalAlpha = (0.65 + 0.35 * lifeLeft) * pulse;
+  ctx.globalAlpha = (0.65 + 0.35 * ageLeft) * pulse;
   ctx.fillRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
   ctx.globalAlpha = 0.36;
   ctx.strokeStyle = '#ffffff';
@@ -2926,7 +2898,7 @@ let foods = [];
    GAME STATE
    =========================== */
 let fieldScale = 1.0;
-let score, lives, speed, best, running, paused;
+let score, speed, best, running, paused;
 let spawnTimer;
 let msgTimer = null;
 let tickStartTime = 0;
@@ -2947,9 +2919,6 @@ function victoryGoalText() {
 function updateUI() {
   document.getElementById('score').textContent = score;
   document.getElementById('best').textContent = best;
-  const hearts = [];
-  for (let i = 0; i < lives; i++) hearts.push('❤');
-  document.getElementById('lives').textContent = hearts.join(' ') || '💀';
   document.getElementById('goalText').textContent = victoryGoalText();
   document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
   document.getElementById('pauseBtn').textContent = paused ? tr('resume') : tr('pause');
@@ -3055,10 +3024,6 @@ function applyEffect(type) {
       restartLoop();
       addMsg(tr('slowed'), 'good');
       break;
-    case 'extraLife':
-      lives++;
-      addMsg(tr('extraLifeMsg'), 'good');
-      break;
     case 'shrink':
       if (snake.length > 2) { snake.pop(); snake.pop(); }
       else if (snake.length > 1) { snake.pop(); }
@@ -3069,34 +3034,13 @@ function applyEffect(type) {
       restartLoop();
       addMsg(tr('spedUp'), 'warn');
       break;
-    case 'loseLife':
-      loseLife();
-      break;
   }
 }
 
-function loseLife() {
-  lives--;
-  if (lives <= 0) {
-    running = false;
-    clearMsgTimer();
-    setMsg(tr('gameOver'), 'dead');
-  } else {
-    addMsg(tr('lostLife', { n: lives }), 'warn');
-  }
-}
-
-function die(reason = tr('hitSelf')) {
-  lives--;
-  if (lives <= 0) {
-    running = false;
-    clearMsgTimer();
-    setMsg(tr('gameOver'), 'dead');
-  } else {
-    resetSnakeOnDeath();
-    const sep = LANG === 'zh' ? '' : ' ';
-    addMsg(`${reason}${sep}${tr('livesLeft', { n: lives })}`, 'warn');
-  }
+function die(reason = tr('gameOver')) {
+  running = false;
+  clearMsgTimer();
+  setMsg(reason || tr('gameOver'), 'dead');
 }
 
 function winByLoop(info) {
@@ -3104,23 +3048,6 @@ function winByLoop(info) {
   const text = info.winText || tr('winNontrivial', { label: info.label });
   clearMsgTimer();
   setMsg(text, 'good');
-}
-
-function resetSnakeOnDeath() {
-  if (MAP_TYPE === 'genus2') {
-    resetSnake();
-    return;
-  }
-  const face = MAP_TYPE === 'sphere' ? 'F' : null;
-  snake = buildInitialSnake(
-    { gx: Math.floor(GRID_SIZE / 2), gy: Math.floor(GRID_SIZE / 2), side: 1, face },
-    INITIAL_SNAKE_LENGTH,
-  );
-  direction = { dx: 1, dy: 0 };
-  nextDir = { dx: 1, dy: 0 };
-  chartDisplayDir = { dx: 1, dy: 0 };
-  chartMirror = 1;
-  initializeSnakeTopology();
 }
 
 function gameTick() {
@@ -3303,7 +3230,6 @@ function init() {
   fieldScale = 1.0;
   ensureSurfaceGeometry();
   score = 0;
-  lives = 3;
   speed = 100;
   running = true;
   paused = false;
