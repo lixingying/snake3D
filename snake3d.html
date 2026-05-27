@@ -562,7 +562,8 @@ const CUT_COLORS = {
   c: '#7cff6b',
   d: '#ffd166',
 };
-const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'd', 'b', 'D', 'B'];
+// Boundary word around the genus-2 basepoint: left overlap a,c,A; right overlap b,d,B.
+const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'b', 'd', 'B', 'D'];
 const PROJECTIVE_RELATOR = ['a', 'a'];
 const KLEIN_RELATOR = ['a', 'b', 'A', 'b'];
 
@@ -2432,7 +2433,7 @@ function freeReduceWord(word) {
   return reduced;
 }
 
-function relatorVariants(relator) {
+function symmetrizedRelators(relator) {
   const variants = [];
   const sources = [relator, invertWord(relator)];
   for (const source of sources) {
@@ -2443,41 +2444,52 @@ function relatorVariants(relator) {
   return variants;
 }
 
-const GENUS2_RELATOR_VARIANTS = relatorVariants(GENUS2_RELATOR);
-
-function arraysEqual(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+function wordMatchesAt(word, start, pattern) {
+  if (start + pattern.length > word.length) return false;
+  for (let i = 0; i < pattern.length; i++) {
+    if (word[start + i] !== pattern[i]) return false;
   }
   return true;
 }
 
+function dehnRulesFromRelator(relator) {
+  const rules = [];
+  const halfLength = relator.length / 2;
+  for (const variant of symmetrizedRelators(relator)) {
+    for (let len = relator.length; len > halfLength; len--) {
+      rules.push({
+        pattern: variant.slice(0, len),
+        replacement: invertWord(variant.slice(len)),
+      });
+    }
+  }
+  return rules.sort((left, right) => right.pattern.length - left.pattern.length);
+}
+
+const GENUS2_DEHN_RULES = dehnRulesFromRelator(GENUS2_RELATOR);
+
 function reduceGenus2Word(word) {
   let current = freeReduceWord(word);
-  let changed = true;
-  let guard = 0;
-  while (changed && guard++ < 200) {
-    changed = false;
-    current = freeReduceWord(current);
 
-    for (let start = 0; start < current.length && !changed; start++) {
-      const maxLen = Math.min(GENUS2_RELATOR.length, current.length - start);
-      for (let len = maxLen; len > GENUS2_RELATOR.length / 2; len--) {
-        const segment = current.slice(start, start + len);
-        const variant = GENUS2_RELATOR_VARIANTS.find(candidate => arraysEqual(segment, candidate.slice(0, len)));
-        if (!variant) continue;
-        const replacement = invertWord(variant.slice(len));
-        current = freeReduceWord([
-          ...current.slice(0, start),
-          ...replacement,
-          ...current.slice(start + len),
-        ]);
-        changed = true;
+  while (current.length > 0) {
+    let match = null;
+    for (let start = 0; start < current.length && !match; start++) {
+      for (const rule of GENUS2_DEHN_RULES) {
+        if (!wordMatchesAt(current, start, rule.pattern)) continue;
+        match = { start, rule };
         break;
       }
     }
+
+    if (!match) return current;
+
+    current = freeReduceWord([
+      ...current.slice(0, match.start),
+      ...match.rule.replacement,
+      ...current.slice(match.start + match.rule.pattern.length),
+    ]);
   }
+
   return current;
 }
 
@@ -2625,6 +2637,25 @@ function genus2StepCrossingCandidates(from, moveDir) {
   }).filter(candidate => candidate && Math.abs(candidate.det) > 1e-6);
 }
 
+function genus2CutsHaveSameTangent(a, b) {
+  return a.cut.tx === b.cut.tx && a.cut.ty === b.cut.ty;
+}
+
+function genus2OrderOverlappingCrossings(crossings) {
+  const labels = crossings.map(crossing => crossing.cut.label).sort().join('');
+  const orderByMiddleCut = (outerLabel, middleLabel) => {
+    const middle = crossings.find(crossing => crossing.cut.label === middleLabel);
+    const outers = crossings.filter(crossing => crossing.cut.label === outerLabel);
+    if (!middle || outers.length !== 2) return crossings;
+    const before = outers.find(crossing => genus2CutsHaveSameTangent(crossing, middle)) || outers[0];
+    const after = outers.find(crossing => crossing !== before) || outers[1];
+    return [before, middle, after];
+  };
+  if (labels === 'aac') return orderByMiddleCut('a', 'c');
+  if (labels === 'bbd') return orderByMiddleCut('b', 'd');
+  return crossings;
+}
+
 function genus2SelectedStepCrossing(from, moveDir) {
   const candidates = genus2StepCrossingCandidates(from, moveDir);
   if (candidates.length === 0) return null;
@@ -2636,7 +2667,8 @@ function genus2ActiveStepCrossings(from, moveDir) {
   if (candidates.length === 0) return [];
   const sameFace = candidates.filter(candidate => candidate.sameFace);
   const active = sameFace.length > 0 ? sameFace : [candidates[0]];
-  return active.length > 1 && active[0].det < 0 ? active.slice().reverse() : active;
+  const ordered = genus2OrderOverlappingCrossings(active);
+  return ordered.length > 1 && ordered[0].det < 0 ? ordered.slice().reverse() : ordered;
 }
 
 function genus2StepWord(from, moveDir) {
