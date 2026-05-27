@@ -2577,30 +2577,70 @@ function genus2MoveEdgeKey(from, moveDir) {
   );
 }
 
+function genus2CellVoxelPoint(faceKey, gx, gy) {
+  const topology = getGenus2Topology();
+  const face = topology.faceMap.get(faceKey || topology.startFaceKey);
+  return genus2VoxelPoint(
+    face,
+    (gx + 0.5) / GENUS2_PATCH_CELLS,
+    (gy + 0.5) / GENUS2_PATCH_CELLS,
+  );
+}
+
+function genus2MoveInCutCoordinates(from, moveDir, cutFaceKey) {
+  const topology = getGenus2Topology();
+  const fromFace = from.face || topology.startFaceKey;
+  const cutFace = topology.faceMap.get(cutFaceKey || fromFace);
+  if (!cutFace) return { dx: moveDir.dx, dy: moveDir.dy };
+  const next = normalizeGenus2Position(
+    from.gx + moveDir.dx,
+    from.gy + moveDir.dy,
+    moveDir,
+    from.side ?? 1,
+    fromFace,
+  );
+  if (next.blocked) return null;
+  const fromUv = genus2LocalUVFromVoxel(cutFace, genus2CellVoxelPoint(fromFace, from.gx, from.gy));
+  const toUv = genus2LocalUVFromVoxel(cutFace, genus2CellVoxelPoint(next.face, next.gx, next.gy));
+  return {
+    dx: (toUv.u - fromUv.u) * GENUS2_PATCH_CELLS,
+    dy: (toUv.v - fromUv.v) * GENUS2_PATCH_CELLS,
+  };
+}
+
 function genus2StepCrossingCandidates(from, moveDir) {
   const edgeKey = genus2MoveEdgeKey(from, moveDir);
   const cuts = getGenus2CutSchema().byEdgeKey.get(edgeKey);
   const face = from.face || genus2StartFaceKey();
   return (cuts || []).map(cut => {
-    const det = cut.tx * moveDir.dy - cut.ty * moveDir.dx;
+    const cutMove = genus2MoveInCutCoordinates(from, moveDir, cut.face);
+    if (!cutMove) return null;
+    const det = cut.tx * cutMove.dy - cut.ty * cutMove.dx;
     return {
       cut,
       det,
-      letter: det >= 0 ? cut.label : cut.label.toUpperCase(),
+      letter: det > 0 ? cut.label : cut.label.toUpperCase(),
       sameFace: cut.face === face,
     };
-  });
+  }).filter(candidate => candidate && Math.abs(candidate.det) > 1e-6);
 }
 
 function genus2SelectedStepCrossing(from, moveDir) {
   const candidates = genus2StepCrossingCandidates(from, moveDir);
   if (candidates.length === 0) return null;
-  return candidates.find(candidate => candidate.sameFace) || candidates[0];
+  return genus2ActiveStepCrossings(from, moveDir)[0] || null;
+}
+
+function genus2ActiveStepCrossings(from, moveDir) {
+  const candidates = genus2StepCrossingCandidates(from, moveDir);
+  if (candidates.length === 0) return [];
+  const sameFace = candidates.filter(candidate => candidate.sameFace);
+  const active = sameFace.length > 0 ? sameFace : [candidates[0]];
+  return active.length > 1 && active[0].det < 0 ? active.slice().reverse() : active;
 }
 
 function genus2StepWord(from, moveDir) {
-  const crossing = genus2SelectedStepCrossing(from, moveDir);
-  return crossing ? [crossing.letter] : [];
+  return genus2ActiveStepCrossings(from, moveDir).map(crossing => crossing.letter);
 }
 
 function boundaryCrossingEdge(from, moveDir) {
@@ -2812,9 +2852,9 @@ function describeTorusMove(from, moveDir) {
 
 function describeGenus2Move(from, moveDir) {
   const candidates = genus2StepCrossingCandidates(from, moveDir);
-  const selected = genus2SelectedStepCrossing(from, moveDir);
+  const active = genus2ActiveStepCrossings(from, moveDir);
   const face = from.face || genus2StartFaceKey();
-  if (!selected) {
+  if (active.length === 0) {
     return {
       step: tr('noCut'),
       move: `(${moveDir.dx}, ${moveDir.dy})`,
@@ -2822,15 +2862,17 @@ function describeGenus2Move(from, moveDir) {
       det: '-',
     };
   }
-  const candidateText = candidates.length > 1
-    ? tr('candidates', { list: candidates.map(c => c.letter).join(','), letter: selected.letter })
-    : `cut ${selected.cut.label} -> ${selected.letter}`;
+  const letters = active.map(crossing => crossing.letter);
+  const labels = [...new Set(active.map(crossing => crossing.cut.label))].join(',');
+  const candidateText = candidates.length > active.length || active.length > 1
+    ? tr('candidates', { list: candidates.map(c => c.letter).join(','), letter: letters.join('') })
+    : `cut ${labels} -> ${letters.join('')}`;
   return {
     step: `${candidateText} @ ${face}`,
     move: `(${moveDir.dx}, ${moveDir.dy})`,
-    cut: `(${selected.cut.tx}, ${selected.cut.ty})`,
-    det: `${selected.cut.tx}*${moveDir.dy} - ${selected.cut.ty}*${moveDir.dx} = ${selected.det}`,
-    warn: candidates.length > 1,
+    cut: active.map(crossing => `${crossing.cut.label}:(${crossing.cut.tx}, ${crossing.cut.ty})`).join('; '),
+    det: active.map(crossing => `${crossing.cut.tx}*${moveDir.dy} - ${crossing.cut.ty}*${moveDir.dx} = ${crossing.det}`).join('; '),
+    warn: candidates.length > active.length || active.length > 1,
   };
 }
 
