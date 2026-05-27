@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+Snake on Surfaces
+Copyright 2026 Xingying Li
+Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -147,6 +152,15 @@
     user-select: none;
   }
   #mapCanvas { touch-action: none; display: block; }
+  #touch-control-zone {
+    display: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    pointer-events: none;
+    touch-action: none;
+  }
   #map-panel .map-title {
     text-align: center;
     font-size: 0.68rem;
@@ -190,9 +204,9 @@
   #pi1-panel .pi1-warn { color: #f0a500; }
   @media (max-width: 700px), (pointer: coarse) and (max-width: 980px) {
     #canvas-container {
-      top: 88px;
+      top: 64px;
       right: 0;
-      bottom: 330px;
+      bottom: 348px;
       left: 0;
     }
     #overlay {
@@ -234,38 +248,49 @@
       left: 50%;
       right: auto;
       top: auto;
-      bottom: calc(86px + env(safe-area-inset-bottom));
+      bottom: calc(84px + env(safe-area-inset-bottom));
       transform: translateX(-50%);
       padding: 4px;
+      z-index: 4;
     }
     #mapCanvas {
-      width: min(54vw, 210px);
-      height: min(54vw, 210px);
+      width: min(60vw, 232px);
+      height: min(60vw, 232px);
+    }
+    #touch-control-zone {
+      display: block;
+      pointer-events: auto;
+      bottom: calc(84px + env(safe-area-inset-bottom));
+      height: calc(min(60vw, 232px) + 26px);
     }
     #map-panel .map-title {
       font-size: 0.62rem;
     }
     #pi1-panel {
       left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
+      top: calc(82px + env(safe-area-inset-top));
+      transform: translateX(-50%);
       width: min(330px, calc(100vw - 24px));
-      max-height: 42vh;
-      overflow: hidden;
+      max-height: 35vh;
+      overflow: auto;
       font-size: 0.62rem;
     }
   }
   @media (max-width: 380px), (max-height: 720px) and (pointer: coarse) {
     #canvas-container {
-      top: 78px;
-      bottom: 288px;
+      top: 62px;
+      bottom: 298px;
     }
     #map-panel {
-      bottom: calc(74px + env(safe-area-inset-bottom));
+      bottom: calc(76px + env(safe-area-inset-bottom));
     }
     #mapCanvas {
-      width: min(48vw, 176px);
-      height: min(48vw, 176px);
+      width: min(52vw, 190px);
+      height: min(52vw, 190px);
+    }
+    #touch-control-zone {
+      bottom: calc(76px + env(safe-area-inset-bottom));
+      height: calc(min(52vw, 190px) + 26px);
     }
     .legend {
       font-size: 0.58rem;
@@ -277,15 +302,19 @@
   }
   @media (pointer: coarse) and (max-width: 980px) and (max-height: 520px) {
     #canvas-container {
-      top: 70px;
-      bottom: 222px;
+      top: 58px;
+      bottom: 220px;
     }
     #map-panel {
-      bottom: calc(52px + env(safe-area-inset-bottom));
+      bottom: calc(54px + env(safe-area-inset-bottom));
     }
     #mapCanvas {
-      width: min(34vh, 146px);
-      height: min(34vh, 146px);
+      width: min(38vh, 154px);
+      height: min(38vh, 154px);
+    }
+    #touch-control-zone {
+      bottom: calc(54px + env(safe-area-inset-bottom));
+      height: calc(min(38vh, 154px) + 26px);
     }
     .legend {
       display: none;
@@ -334,6 +363,7 @@
 
 <div class="pause-overlay" id="pauseOverlay" style="display:none;">Paused</div>
 
+<div id="touch-control-zone" aria-hidden="true"></div>
 <div id="map-panel">
   <canvas id="mapCanvas" width="252" height="252"></canvas>
   <div class="map-title" id="mapTitle">Chart</div>
@@ -368,6 +398,7 @@ document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
 const GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
 const INITIAL_SNAKE_LENGTH = 3;
+const INITIAL_SPEED_MS = 100;
 const SPAWN_INTERVAL = 24;
 const FOOD_LIFETIME = 220;
 const INITIAL_FOODS = 4;
@@ -1495,6 +1526,10 @@ scene.add(surfaceGroup);
 const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
 camera.position.set(3.5, 2.8, 5.5);
 camera.lookAt(0, 0, 0);
+const DEFAULT_CAMERA_POSITION = new THREE.Vector3(3.5, 2.8, 5.5);
+const GENUS2_CAMERA_POSITION = new THREE.Vector3(2.75, 2.2, 4.32);
+const MOBILE_CAMERA_DISTANCE_SCALE = 0.84;
+const MOBILE_VIEW_QUERY = window.matchMedia('(max-width: 700px), (pointer: coarse) and (max-width: 980px)');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(container.clientWidth, container.clientHeight);
@@ -1516,6 +1551,9 @@ const VIEW_MIN_DISTANCE = 2.5;
 const VIEW_MAX_DISTANCE = 8;
 let isSurfaceDragging = false;
 let lastPointer = { x: 0, y: 0 };
+const surfacePointers = new Map();
+let pinchStartDistance = 0;
+let pinchStartCameraDistance = 0;
 renderer.domElement.style.touchAction = 'none';
 
 window.addEventListener('resize', () => {
@@ -1524,27 +1562,80 @@ window.addEventListener('resize', () => {
   renderer.setSize(container.clientWidth, container.clientHeight);
 });
 
+function pointerDistance(points) {
+  if (points.length < 2) return 0;
+  return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+}
+
+function clampViewDistance(distance) {
+  return Math.max(VIEW_MIN_DISTANCE, Math.min(VIEW_MAX_DISTANCE, distance));
+}
+
+function setCameraDistance(distance) {
+  camera.position.setLength(clampViewDistance(distance));
+  camera.lookAt(0, 0, 0);
+}
+
+function beginSurfacePinch() {
+  const points = [...surfacePointers.values()];
+  pinchStartDistance = pointerDistance(points);
+  pinchStartCameraDistance = camera.position.length();
+}
+
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (e.button !== 0) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault();
+  surfacePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   isSurfaceDragging = true;
   lastPointer = { x: e.clientX, y: e.clientY };
   renderer.domElement.setPointerCapture(e.pointerId);
-});
+  if (surfacePointers.size >= 2) {
+    isSurfaceDragging = false;
+    beginSurfacePinch();
+  }
+}, { passive: false });
 
 renderer.domElement.addEventListener('pointermove', e => {
+  if (!surfacePointers.has(e.pointerId)) return;
+  e.preventDefault();
+  surfacePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (surfacePointers.size >= 2) {
+    const distance = pointerDistance([...surfacePointers.values()]);
+    if (pinchStartDistance > 0 && distance > 0) {
+      setCameraDistance(pinchStartCameraDistance * (pinchStartDistance / distance));
+    }
+    return;
+  }
   if (!isSurfaceDragging) return;
   const dx = e.clientX - lastPointer.x;
   const dy = e.clientY - lastPointer.y;
   lastPointer = { x: e.clientX, y: e.clientY };
   surfaceGroup.rotation.y += dx * 0.008;
   surfaceGroup.rotation.x += dy * 0.008;
-});
+}, { passive: false });
 
 function stopSurfaceDrag(e) {
-  isSurfaceDragging = false;
+  if (e?.pointerId !== undefined) {
+    surfacePointers.delete(e.pointerId);
+  }
   if (e?.pointerId !== undefined && renderer.domElement.hasPointerCapture(e.pointerId)) {
     renderer.domElement.releasePointerCapture(e.pointerId);
   }
+  if (surfacePointers.size === 0) {
+    isSurfaceDragging = false;
+    pinchStartDistance = 0;
+    pinchStartCameraDistance = 0;
+    return;
+  }
+  if (surfacePointers.size === 1) {
+    const remaining = [...surfacePointers.values()][0];
+    lastPointer = { ...remaining };
+    isSurfaceDragging = true;
+    pinchStartDistance = 0;
+    pinchStartCameraDistance = 0;
+    return;
+  }
+  beginSurfacePinch();
 }
 
 renderer.domElement.addEventListener('pointerup', stopSurfaceDrag);
@@ -1552,12 +1643,7 @@ renderer.domElement.addEventListener('pointercancel', stopSurfaceDrag);
 renderer.domElement.addEventListener('wheel', e => {
   e.preventDefault();
   const distance = camera.position.length();
-  const nextDistance = Math.max(
-    VIEW_MIN_DISTANCE,
-    Math.min(VIEW_MAX_DISTANCE, distance * Math.exp(e.deltaY * 0.001)),
-  );
-  camera.position.setLength(nextDistance);
-  camera.lookAt(0, 0, 0);
+  setCameraDistance(distance * Math.exp(e.deltaY * 0.001));
 }, { passive: false });
 
 /* ===========================
@@ -3244,7 +3330,9 @@ function restartLoop() {
    CAMERA
    =========================== */
 function resetCamera() {
-  camera.position.set(3.5, 2.8, 5.5);
+  const position = (MAP_TYPE === 'genus2' ? GENUS2_CAMERA_POSITION : DEFAULT_CAMERA_POSITION).clone();
+  if (MOBILE_VIEW_QUERY.matches) position.multiplyScalar(MOBILE_CAMERA_DISTANCE_SCALE);
+  camera.position.copy(position);
   camera.lookAt(0, 0, 0);
   surfaceGroup.rotation.set(0, 0, 0);
 }
@@ -3336,7 +3424,7 @@ function init() {
   fieldScale = 1.0;
   ensureSurfaceGeometry();
   score = 0;
-  speed = 100;
+  speed = INITIAL_SPEED_MS;
   running = true;
   paused = false;
   foods = [];
@@ -3358,6 +3446,7 @@ function init() {
    LOCAL MAP (2D CHART)
    =========================== */
 const mapCanvas = document.getElementById('mapCanvas');
+const touchControlZone = document.getElementById('touch-control-zone');
 const MAP_CTX = mapCanvas.getContext('2d');
 const MAP_CELLS = 9;
 const MAP_PX = mapCanvas.width / MAP_CELLS;
@@ -3381,34 +3470,41 @@ function handleMapSwipe(dx, dy) {
   return true;
 }
 
-mapCanvas.addEventListener('pointerdown', e => {
+function startChartControlPointer(e) {
   claimMapPointerEvent(e);
-  mapTouchStart = { x: e.clientX, y: e.clientY };
-  mapCanvas.setPointerCapture(e.pointerId);
-}, { passive: false });
+  mapTouchStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  e.currentTarget.setPointerCapture(e.pointerId);
+}
 
-mapCanvas.addEventListener('pointermove', e => {
-  if (!mapTouchStart) return;
+function moveChartControlPointer(e) {
+  if (!mapTouchStart || mapTouchStart.pointerId !== e.pointerId) return;
   claimMapPointerEvent(e);
   const dx = e.clientX - mapTouchStart.x;
   const dy = e.clientY - mapTouchStart.y;
   if (handleMapSwipe(dx, dy)) {
-    mapTouchStart = { x: e.clientX, y: e.clientY };
-  }
-}, { passive: false });
-
-function endMapPointer(e) {
-  if (!mapTouchStart) return;
-  claimMapPointerEvent(e);
-  handleMapSwipe(e.clientX - mapTouchStart.x, e.clientY - mapTouchStart.y);
-  mapTouchStart = null;
-  if (mapCanvas.hasPointerCapture(e.pointerId)) {
-    mapCanvas.releasePointerCapture(e.pointerId);
+    mapTouchStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
   }
 }
 
-mapCanvas.addEventListener('pointerup', endMapPointer, { passive: false });
-mapCanvas.addEventListener('pointercancel', endMapPointer, { passive: false });
+function endChartControlPointer(e) {
+  if (!mapTouchStart || mapTouchStart.pointerId !== e.pointerId) return;
+  claimMapPointerEvent(e);
+  handleMapSwipe(e.clientX - mapTouchStart.x, e.clientY - mapTouchStart.y);
+  mapTouchStart = null;
+  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+}
+
+function bindChartControlSurface(el) {
+  el.addEventListener('pointerdown', startChartControlPointer, { passive: false });
+  el.addEventListener('pointermove', moveChartControlPointer, { passive: false });
+  el.addEventListener('pointerup', endChartControlPointer, { passive: false });
+  el.addEventListener('pointercancel', endChartControlPointer, { passive: false });
+}
+
+bindChartControlSurface(mapCanvas);
+bindChartControlSurface(touchControlZone);
 
 function drawMiniMap() {
   if (snake.length === 0) return;

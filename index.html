@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+Snake on Surfaces
+Copyright 2026 Xingying Li
+Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -87,6 +92,15 @@
     letter-spacing: 2px;
     margin-bottom: 8px;
   }
+  .repo-link {
+    margin-top: 20px;
+    font-size: 0.72rem;
+  }
+  .repo-link a {
+    color: #4ecca3;
+    text-decoration: none;
+  }
+  .repo-link a:hover { text-decoration: underline; }
   @media (max-width: 880px) {
     .maps { grid-template-columns: repeat(2, 260px); }
   }
@@ -127,6 +141,7 @@
       <div class="map-name" data-i18n="klein">Klein Bottle</div>
     </a>
   </div>
+  <div class="repo-link"><a href="https://github.com/lixingying/snake3D" target="_blank" rel="noopener noreferrer">Source Code on GitHub</a></div>
 </div>
 <script>
 const I18N = {
