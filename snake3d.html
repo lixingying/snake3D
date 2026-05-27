@@ -2548,10 +2548,19 @@ function invertTopologyWord(word) {
   return invertWord(word);
 }
 
+function kleinIdentityFrame() {
+  return { ySign: 1 };
+}
+
+function cloneKleinFrame(frame) {
+  return { ySign: frame?.ySign ?? 1 };
+}
+
 function emptyTopologyState() {
   if (MAP_TYPE === 'torus') return { wx: 0, wy: 0 };
   if (MAP_TYPE === 'mobius') return { w: 0, boundary: 0 };
-  if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return { word: [] };
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') return { word: [] };
+  if (MAP_TYPE === 'klein') return { word: [], frame: kleinIdentityFrame() };
   return null;
 }
 
@@ -2559,7 +2568,8 @@ function cloneTopologyState(state) {
   if (!state) return emptyTopologyState();
   if (MAP_TYPE === 'torus') return { wx: state.wx || 0, wy: state.wy || 0 };
   if (MAP_TYPE === 'mobius') return { w: state.w || 0, boundary: state.boundary || 0 };
-  if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return { word: [...(state.word || [])] };
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') return { word: [...(state.word || [])] };
+  if (MAP_TYPE === 'klein') return { word: [...(state.word || [])], frame: cloneKleinFrame(state.frame) };
   return null;
 }
 
@@ -2697,25 +2707,69 @@ function mobiusStepDelta(from, moveDir) {
   return { w, boundary };
 }
 
-function kleinStepCrossing(from, moveDir) {
-  if (moveDir.dx === 1 && (from.gx + 1) % GRID_SIZE === KLEIN_CUT_A_X) {
-    return { label: 'a', letter: 'a', cut: `u=${KLEIN_CUT_A_X}/N` };
+const KLEIN_CUTS = {
+  // Fixed cut directions in the square chart.  The sign of b-crossings is read
+  // after converting the move to the current topology frame.
+  a: { label: 'a', tx: 0, ty: -1, cut: `u=${KLEIN_CUT_A_X}/N` },
+  b: { label: 'b', tx: 1, ty: 0, cut: `v=${KLEIN_CUT_B_Y}/N` },
+};
+
+function crossesPeriodicGridLine(pos, delta, line) {
+  if (delta === 1) return wrapGrid(pos + 1) === line;
+  if (delta === -1) return wrapGrid(pos) === line;
+  return false;
+}
+
+function kleinTopoMove(state, moveDir) {
+  const ySign = state?.frame?.ySign ?? 1;
+  return {
+    dx: moveDir.dx,
+    dy: ySign * moveDir.dy,
+  };
+}
+
+function kleinLetterFromCrossing(cut, topoMove) {
+  const det = cut.tx * topoMove.dy - cut.ty * topoMove.dx;
+  return {
+    det,
+    letter: det > 0 ? cut.label : cut.label.toUpperCase(),
+  };
+}
+
+function kleinStepCrossing(from, moveDir, state = from?.topo) {
+  const current = cloneTopologyState(state);
+  const topoMove = kleinTopoMove(current, moveDir);
+
+  if (moveDir.dx !== 0 && crossesPeriodicGridLine(from.gx, moveDir.dx, KLEIN_CUT_A_X)) {
+    const cut = KLEIN_CUTS.a;
+    return { ...cut, ...kleinLetterFromCrossing(cut, topoMove), topoMove };
   }
-  if (moveDir.dx === -1 && from.gx === KLEIN_CUT_A_X) {
-    return { label: 'a', letter: 'A', cut: `u=${KLEIN_CUT_A_X}/N` };
+
+  if (moveDir.dy !== 0 && crossesPeriodicGridLine(from.gy, moveDir.dy, KLEIN_CUT_B_Y)) {
+    const cut = KLEIN_CUTS.b;
+    return { ...cut, ...kleinLetterFromCrossing(cut, topoMove), topoMove };
   }
-  if (moveDir.dy === 1 && (from.gy + 1) % GRID_SIZE === KLEIN_CUT_B_Y) {
-    return { label: 'b', letter: 'b', cut: `v=${KLEIN_CUT_B_Y}/N` };
-  }
-  if (moveDir.dy === -1 && from.gy === KLEIN_CUT_B_Y) {
-    return { label: 'b', letter: 'B', cut: `v=${KLEIN_CUT_B_Y}/N` };
-  }
+
   return null;
 }
 
-function kleinStepWord(from, moveDir) {
-  const crossing = kleinStepCrossing(from, moveDir);
+function kleinStepWord(from, moveDir, state = from?.topo) {
+  const crossing = kleinStepCrossing(from, moveDir, state);
   return crossing ? [crossing.letter] : [];
+}
+
+function advanceKleinTopologyState(state, from, moveDir) {
+  const current = cloneTopologyState(state);
+  const crossing = kleinStepCrossing(from, moveDir, current);
+  const nextYSign = crossing?.label === 'a'
+    ? -current.frame.ySign
+    : current.frame.ySign;
+  return {
+    // Keep the raw cut-crossing word.  Reduction is only for testing/displaying
+    // closed-loop classes; appending one step must not rewrite old crossings.
+    word: [...current.word, ...(crossing ? [crossing.letter] : [])],
+    frame: { ySign: nextYSign },
+  };
 }
 
 function advanceTopologyState(state, from, moveDir) {
@@ -2746,9 +2800,7 @@ function advanceTopologyState(state, from, moveDir) {
     };
   }
   if (MAP_TYPE === 'klein') {
-    return {
-      word: reduceKleinWord([...current.word, ...kleinStepWord(from, moveDir)]),
-    };
+    return advanceKleinTopologyState(current, from, moveDir);
   }
   return null;
 }
@@ -2830,7 +2882,8 @@ function topologyWordFormula(word) {
 function topologyStateFormula(state) {
   if (MAP_TYPE === 'torus') return torusStateFormula(state);
   if (MAP_TYPE === 'mobius') return mobiusStateFormula(state);
-  if (['genus2', 'projective', 'klein'].includes(MAP_TYPE)) return topologyWordFormula(state?.word || []);
+  if (MAP_TYPE === 'klein') return wordFormula(state?.word || []);
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') return topologyWordFormula(state?.word || []);
   return '1';
 }
 
@@ -2961,24 +3014,25 @@ function describeMobiusMove(from, moveDir) {
 }
 
 function describeKleinMove(from, moveDir) {
-  const crossing = kleinStepCrossing(from, moveDir);
+  const current = cloneTopologyState(from.topo);
+  const crossing = kleinStepCrossing(from, moveDir, current);
+  const topoMove = kleinTopoMove(current, moveDir);
   if (!crossing) {
     return {
       step: tr('noCut'),
-      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      move: `display (${moveDir.dx}, ${moveDir.dy}), topo (${topoMove.dx}, ${topoMove.dy})`,
       cut: '-',
       det: '-',
     };
   }
-  const letter = crossing.letter;
-  const before = topologyWordFormula(from.topo?.word || []);
-  const nextWord = reduceKleinWord([...(from.topo?.word || []), letter]);
+  const beforeRaw = wordFormula(current.word || []);
+  const afterRawWord = [...(current.word || []), crossing.letter];
   const cutName = crossing.label === 'a' ? 'a: u=1/2' : 'b: v=1/4';
   return {
-    step: `cut ${crossing.label} -> ${letter}`,
-    move: `(${moveDir.dx}, ${moveDir.dy})`,
-    cut: cutName,
-    det: `NF(${before}·${letter}) = ${kleinNormalFormula(nextWord)}`,
+    step: `cut ${crossing.label} -> ${crossing.letter}`,
+    move: `display (${moveDir.dx}, ${moveDir.dy}), topo (${crossing.topoMove.dx}, ${crossing.topoMove.dy})`,
+    cut: `${cutName}; tangent=(${crossing.tx}, ${crossing.ty})`,
+    det: `${crossing.tx}*${crossing.topoMove.dy} - ${crossing.ty}*${crossing.topoMove.dx} = ${crossing.det}; ${beforeRaw}·${crossing.letter} = ${wordFormula(afterRawWord)}; NF = ${kleinNormalFormula(afterRawWord)}`,
   };
 }
 
