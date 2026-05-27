@@ -390,8 +390,23 @@ import * as THREE from 'three';
    =========================== */
 const urlParams = new URLSearchParams(location.search);
 const requestedMap = urlParams.get('map');
-const requestedLang = urlParams.get('lang') || localStorage.getItem('snake3dLang') || 'en';
+function getDeviceDefaultLang() {
+  const langs = navigator.languages && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en'];
+
+  return langs.some(l => String(l).toLowerCase().startsWith('zh'))
+    ? 'zh'
+    : 'en';
+}
+
+const requestedLang =
+  urlParams.get('lang') ||
+  localStorage.getItem('snake3dLang') ||
+  getDeviceDefaultLang();
+
 const LANG = requestedLang === 'zh' ? 'zh' : 'en';
+
 localStorage.setItem('snake3dLang', LANG);
 document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
 

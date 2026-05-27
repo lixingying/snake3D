@@ -170,8 +170,18 @@ const I18N = {
     klein: '克莱因瓶',
   },
 };
-let lang = localStorage.getItem('snake3dLang') || 'en';
-if (!I18N[lang]) lang = 'en';
+function getDeviceDefaultLang() {
+  const langs = navigator.languages && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en'];
+
+  return langs.some(l => String(l).toLowerCase().startsWith('zh'))
+    ? 'zh'
+    : 'en';
+}
+
+let lang = localStorage.getItem('snake3dLang') || getDeviceDefaultLang();
+if (!I18N[lang]) lang = getDeviceDefaultLang();
 
 function applyLanguage() {
   const dict = I18N[lang];
