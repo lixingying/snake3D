@@ -352,10 +352,10 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
     </div>
     <div class="legend">
       <span id="foodLabel" style="color:#5e5">Food:</span>
-      <span><span class="dot" style="background:#2ecc71"></span><span id="growLabel">Grow</span></span>
+      <span><span class="dot" style="background:#f39c12"></span><span id="growLabel">Grow</span></span>
       <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
       <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
-      <span><span class="dot" style="background:#f39c12"></span><span id="speedUpLabel">Speed Up</span></span>
+      <span><span class="dot" style="background:#2ecc71"></span><span id="speedUpLabel">Speed Up</span></span>
     </div>
     <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -398,7 +398,7 @@ document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
 const GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
 const INITIAL_SNAKE_LENGTH = 3;
-const INITIAL_SPEED_MS = 100;
+const INITIAL_SPEED_MS = 150;
 const SPAWN_INTERVAL = 24;
 const FOOD_LIFETIME = 220;
 const INITIAL_FOODS = 4;
@@ -407,10 +407,10 @@ const MAX_FOODS = 9;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
 const FOOD_DEF = {
-  grow:    { color: 0x2ecc71, weight: 52 },
+  grow:    { color: 0xf39c12, weight: 52 },
   slow:    { color: 0x3498db, weight: 12 },
   shrink:  { color: 0xc0392b, weight: 24 },
-  speedUp: { color: 0xf39c12, weight: 12 },
+  speedUp: { color: 0x2ecc71, weight: 12 },
 };
 
 const TEXT = {
