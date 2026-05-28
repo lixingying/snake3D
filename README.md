@@ -2,6 +2,8 @@
 
 Snake on Surfaces is a browser game that turns the classic snake mechanic into a topology playground. Instead of moving on a flat rectangle, the snake lives on surfaces such as the sphere, torus, genus-2 surface, Mobius strip, projective plane, and Klein bottle.
 
+![Snake on Surfaces screenshot](snake3D.jpg)
+
 The goal is usually to form an Ouroboros: the snake closes into a loop. Different surfaces use different winning conditions, so the game makes fundamental-group and surface-identification ideas visible through play.
 
 ## Features
