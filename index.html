@@ -166,7 +166,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
     <label data-i18n="speedLabel">Speed</label>
     <span class="speed-value" id="speedValue">150</span>
     <span style="font-size:0.75rem;color:#666;">ms</span>
-    <input type="range" class="speed-slider" id="speedSlider" min="40" max="400" value="150" step="5">
+    <input type="range" class="speed-slider" id="speedSlider" min="40" max="260" value="150" step="5">
     <span style="font-size:0.72rem;color:#888;" data-i18n="speedHint">slow &larr; &rarr; fast</span>
   </div>
   <div class="maps">
@@ -263,17 +263,19 @@ document.getElementById('langToggle').addEventListener('click', () => {
 
 const speedSlider = document.getElementById('speedSlider');
 const speedValue = document.getElementById('speedValue');
+const SLIDER_MIN = 40, SLIDER_MAX = 260;
+
 const savedSpeed = localStorage.getItem('snake3dSpeed');
 if (savedSpeed != null) {
   const v = parseInt(savedSpeed, 10);
-  if (v >= 40 && v <= 400) {
-    speedSlider.value = v;
+  if (v >= SLIDER_MIN && v <= SLIDER_MAX) {
+    speedSlider.value = SLIDER_MIN + SLIDER_MAX - v;
     speedValue.textContent = v;
   }
 }
 
 function updateSpeedLinks() {
-  const speed = speedSlider.value;
+  const speed = SLIDER_MIN + SLIDER_MAX - parseInt(speedSlider.value, 10);
   speedValue.textContent = speed;
   localStorage.setItem('snake3dSpeed', speed);
   document.querySelectorAll('.map-card').forEach(link => {
