@@ -92,6 +92,53 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
     letter-spacing: 2px;
     margin-bottom: 8px;
   }
+  .speed-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .speed-control label {
+    font-size: 0.85rem;
+    color: #ccc;
+    letter-spacing: 1px;
+  }
+  .speed-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 180px;
+    height: 6px;
+    background: rgba(78,204,163,0.3);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+  .speed-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4ecca3;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .speed-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #4ecca3;
+    border-radius: 50%;
+    border: 0;
+    cursor: pointer;
+  }
+  .speed-value {
+    display: inline-block;
+    width: 36px;
+    text-align: center;
+    font-weight: bold;
+    color: #4ecca3;
+  }
   .repo-link {
     margin-top: 20px;
     font-size: 0.72rem;
@@ -115,6 +162,13 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 <div class="container">
   <h1 data-i18n="appName">Snake on Surfaces</h1>
   <div class="subtitle" data-i18n="subtitle">Choose a surface to start</div>
+  <div class="speed-control">
+    <label data-i18n="speedLabel">Speed</label>
+    <span class="speed-value" id="speedValue">150</span>
+    <span style="font-size:0.75rem;color:#666;">ms</span>
+    <input type="range" class="speed-slider" id="speedSlider" min="40" max="400" value="150" step="5">
+    <span style="font-size:0.72rem;color:#888;" data-i18n="speedHint">slow &larr; &rarr; fast</span>
+  </div>
   <div class="maps">
     <a class="map-card" data-map="sphere" data-image="" href="snake3d.html?map=sphere&lang=en">
       <div class="surface-preview"></div>
@@ -156,6 +210,8 @@ const I18N = {
     projective: 'Projective Plane',
     mobius: 'Mobius Strip',
     klein: 'Klein Bottle',
+    speedLabel: 'Speed',
+    speedHint: 'slow ← → fast',
   },
   zh: {
     title: '蛇蛇教你学拓扑 — 选择地图',
@@ -168,6 +224,8 @@ const I18N = {
     projective: '射影平面',
     mobius: '莫比乌斯带',
     klein: '克莱因瓶',
+    speedLabel: '速度',
+    speedHint: '慢 ← → 快',
   },
 };
 function getDeviceDefaultLang() {
@@ -202,6 +260,36 @@ document.getElementById('langToggle').addEventListener('click', () => {
   localStorage.setItem('snake3dLang', lang);
   applyLanguage();
 });
+
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
+const savedSpeed = localStorage.getItem('snake3dSpeed');
+if (savedSpeed != null) {
+  const v = parseInt(savedSpeed, 10);
+  if (v >= 40 && v <= 400) {
+    speedSlider.value = v;
+    speedValue.textContent = v;
+  }
+}
+
+function updateSpeedLinks() {
+  const speed = speedSlider.value;
+  speedValue.textContent = speed;
+  localStorage.setItem('snake3dSpeed', speed);
+  document.querySelectorAll('.map-card').forEach(link => {
+    const url = new URL(link.href);
+    url.searchParams.set('speed', speed);
+    link.href = url.toString();
+  });
+}
+
+speedSlider.addEventListener('input', updateSpeedLinks);
+
+const origApplyLanguage = applyLanguage;
+applyLanguage = function() {
+  origApplyLanguage();
+  updateSpeedLinks();
+};
 
 applyLanguage();
 </script>
