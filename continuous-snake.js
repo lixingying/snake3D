@@ -4,7 +4,7 @@
 // Time-based motion and a trail measured in world-space arc length. Rendering,
 // frame rate and keyboard repeat events never determine the game trajectory.
 function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onEvent = () => {},
-  radius = 0.052, initialLength = 1.4, initialSpeed = 0.9, turnRate = 2.5,
+  radius = 0.052, initialLength = 1.4, initialSpeed = 0.9, turnRate = 4,
   random = Math.random, foodWeights = { grow: 52, slow: 12, shrink: 24, speedUp: 12 } }) {
   const STEP = 1 / 120, SPACING = 0.065, FOOD_LIFETIME = 33;
   let trail = [], foods = [], head, length = initialLength, speed = initialSpeed;
