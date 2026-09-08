@@ -149,6 +149,7 @@ applyLanguage = function() {
 
 applyLanguage();
 </script>
+<script src="surface-models.js"></script>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js';
 
@@ -211,24 +212,8 @@ function mobiusPoint(u01, v01) {
   );
 }
 
-function projectiveSquareToDisk(a, b) {
-  return {
-    x: a * Math.sqrt(Math.max(0, 1 - (b * b) / 2)),
-    y: b * Math.sqrt(Math.max(0, 1 - (a * a) / 2)),
-  };
-}
-
 function projectivePoint(u01, v01) {
-  const a = u01 * 2 - 1;
-  const b = v01 * 2 - 1;
-  const disk = projectiveSquareToDisk(a, b);
-  const radius = Math.min(1, Math.hypot(disk.x, disk.y));
-  const theta = Math.atan2(disk.y, disk.x);
-  const v = radius * Math.PI / 2;
-  const x = Math.cos(theta) * Math.sin(2 * v);
-  const y = Math.sin(theta) * Math.sin(2 * v);
-  const z = Math.cos(v) ** 2 - Math.cos(theta) ** 2 * Math.sin(v) ** 2;
-  return new THREE.Vector3(x * 0.9, z * 0.68, y * 0.9);
+  return boySurfacePoint(THREE, u01, v01, 0.68);
 }
 
 function kleinPoint(u01, v01) {

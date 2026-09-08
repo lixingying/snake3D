@@ -21,7 +21,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 </head>
 <body data-page="game">
 
-<div id="canvas-container"></div>
+<div id="canvas-container"><div id="surface-caption">Manifold</div></div>
 
 <div id="overlay">
   <div class="top-panel">
@@ -46,7 +46,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
       <span><span class="dot" style="background:#d96b72"></span><span id="shrinkLabel">Shrink</span></span>
       <span><span class="dot" style="background:#86bb60"></span><span id="speedUpLabel">Speed Up</span></span>
     </div>
-    <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
+    <div class="tip" id="tipText">Hold ← → / A D to steer · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
 </div>
 
@@ -56,13 +56,14 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 <div id="map-panel">
   <canvas id="mapCanvas" width="252" height="252"></canvas>
   <div class="map-title" id="mapTitle">Chart</div>
+  <div class="chart-controls" aria-hidden="true"><span>←</span><span>→</span></div>
 </div>
 
 <div id="pi1-panel" style="display:none;">
   <div class="pi1-title" id="pi1Title">π1 Calculation</div>
   <div class="pi1-row"><span class="pi1-key" id="pi1RelLabel">Relation</span><span class="pi1-val" id="pi1Rel">-</span></div>
   <div class="pi1-row"><span class="pi1-key" id="pi1StepLabel">Last step</span><span class="pi1-val" id="pi1Step">-</span></div>
-  <div class="pi1-row"><span class="pi1-key">dx,dy</span><span class="pi1-val" id="pi1Move">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">u,v</span><span class="pi1-val" id="pi1Move">-</span></div>
   <div class="pi1-row"><span class="pi1-key" id="pi1CutLabel">cut/edge</span><span class="pi1-val" id="pi1Cut">-</span></div>
   <div class="pi1-row"><span class="pi1-key" id="pi1DetLabel">Formula</span><span class="pi1-val" id="pi1Det">-</span></div>
   <div class="pi1-row"><span class="pi1-key" id="pi1HeadLabel">Head word</span><span class="pi1-val" id="pi1Head">1</span></div>
@@ -71,7 +72,12 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
   <div class="pi1-row"><span class="pi1-key" id="pi1CloseLabel">Closure</span><span class="pi1-val" id="pi1Close">-</span></div>
 </div>
 
+<script src="surface-models.js"></script>
 <script src="clay-actors.js"></script>
+<script src="surface-navigation.js"></script>
+<script src="surface-atlas.js"></script>
+<script src="chart-view.js"></script>
+<script src="continuous-snake.js"></script>
 <script type="module">
 import * as THREE from 'three';
 
@@ -101,15 +107,9 @@ localStorage.setItem('snake3dLang', LANG);
 document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
 
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
-const GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
-const INITIAL_SNAKE_LENGTH = 3;
+const CUT_GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
 const requestedSpeed = parseInt(urlParams.get('speed'), 10);
 const INITIAL_SPEED_MS = (requestedSpeed >= 40 && requestedSpeed <= 400) ? requestedSpeed : 150;
-const SPAWN_INTERVAL = 24;
-const FOOD_LIFETIME = 220;
-const INITIAL_FOODS = 4;
-const MIN_FOODS = 3;
-const MAX_FOODS = 9;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
 const FOOD_DEF = {
@@ -142,8 +142,8 @@ const TEXT = {
     slow: 'Slow',
     shrink: 'Shrink',
     speedUp: 'Speed Up',
-    tip: 'Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
-    localMap: 'Chart',
+    tip: 'Hold ← → / A D to steer · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
+    localMap: 'Local chart',
     pi1Title: 'π1 Calculation',
     pi1Rel: 'Relation',
     pi1Step: 'Last step',
@@ -173,7 +173,7 @@ const TEXT = {
     failBoundary: 'Closed loop crossed the boundary; no win',
     failTrivial: 'Trivial loop; tail cut off',
     notMoved: 'not moved yet',
-    nextNotClosed: 'next step not closed',
+    nextNotClosed: 'not closed',
     nontrivial: 'nontrivial',
     trivial: 'trivial',
     candidates: 'candidates {list}; use {letter}',
@@ -206,8 +206,8 @@ const TEXT = {
     slow: '减速',
     shrink: '缩短',
     speedUp: '加速',
-    tip: '方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角',
-    localMap: '局部地图',
+    tip: '按住 ← → / A D 转向 · P / 空格暂停 · 拖拽旋转 · 滚轮缩放 · R 重置视角',
+    localMap: '局部 chart',
     pi1Title: 'π1 计算',
     pi1Rel: '关系',
     pi1Step: '上一步',
@@ -237,7 +237,7 @@ const TEXT = {
     failBoundary: '闭合环路跨过边界，不计胜利',
     failTrivial: '平凡闭合，尾部被切掉',
     notMoved: '尚未移动',
-    nextNotClosed: '下一步未闭合',
+    nextNotClosed: '尚未闭合',
     nontrivial: '非平凡',
     trivial: '平凡',
     candidates: '候选 {list}；采用 {letter}',
@@ -263,10 +263,10 @@ function tr(key, vars = {}) {
 
 const LOOP_WIN_MAPS = new Set(['sphere', 'torus', 'genus2', 'projective', 'mobius', 'klein']);
 const PI1_PANEL_MAPS = new Set(['torus', 'genus2', 'projective', 'mobius', 'klein']);
-const TORUS_CUT_X = GRID_SIZE / 2;
-const TORUS_CUT_Y = GRID_SIZE / 2;
-const KLEIN_CUT_A_X = GRID_SIZE / 2;
-const KLEIN_CUT_B_Y = GRID_SIZE / 4;
+const TORUS_CUT_X = CUT_GRID_SIZE / 2;
+const TORUS_CUT_Y = CUT_GRID_SIZE / 2;
+const KLEIN_CUT_A_X = CUT_GRID_SIZE / 2;
+const KLEIN_CUT_B_Y = CUT_GRID_SIZE / 4;
 const CUT_COLORS = {
   a: '#ff5c8a',
   b: '#48d9ff',
@@ -324,7 +324,7 @@ let cutOverlayGroup = null;
 function ensureSurfaceGeometry() {
   if (!torusMaterial) {
     torusMaterial = new THREE.MeshStandardMaterial({
-      map: gridTex,
+      map: surfaceTex,
       roughness: 0.74,
       metalness: 0,
       side: ['sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
@@ -411,40 +411,40 @@ const CUBE_FACES = {
 };
 const CUBE_TRANSITIONS = {
   F: {
-    L: (x, y) => ({ face: 'L', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    L: (x, y) => ({ face: 'L', gx: CUT_GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
     R: (x, y) => ({ face: 'R', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
-    U: (x, y) => ({ face: 'U', gx: x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    U: (x, y) => ({ face: 'U', gx: x, gy: CUT_GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
     D: (x, y) => ({ face: 'D', gx: x, gy: 0, dir: { dx: 0, dy: 1 } }),
   },
   R: {
-    L: (x, y) => ({ face: 'F', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    L: (x, y) => ({ face: 'F', gx: CUT_GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
     R: (x, y) => ({ face: 'B', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
-    U: (x, y) => ({ face: 'U', gx: GRID_SIZE - 1, gy: GRID_SIZE - 1 - x, dir: { dx: -1, dy: 0 } }),
-    D: (x, y) => ({ face: 'D', gx: GRID_SIZE - 1, gy: x, dir: { dx: -1, dy: 0 } }),
+    U: (x, y) => ({ face: 'U', gx: CUT_GRID_SIZE - 1, gy: CUT_GRID_SIZE - 1 - x, dir: { dx: -1, dy: 0 } }),
+    D: (x, y) => ({ face: 'D', gx: CUT_GRID_SIZE - 1, gy: x, dir: { dx: -1, dy: 0 } }),
   },
   B: {
-    L: (x, y) => ({ face: 'R', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    L: (x, y) => ({ face: 'R', gx: CUT_GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
     R: (x, y) => ({ face: 'L', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
-    U: (x, y) => ({ face: 'U', gx: GRID_SIZE - 1 - x, gy: 0, dir: { dx: 0, dy: 1 } }),
-    D: (x, y) => ({ face: 'D', gx: GRID_SIZE - 1 - x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    U: (x, y) => ({ face: 'U', gx: CUT_GRID_SIZE - 1 - x, gy: 0, dir: { dx: 0, dy: 1 } }),
+    D: (x, y) => ({ face: 'D', gx: CUT_GRID_SIZE - 1 - x, gy: CUT_GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
   },
   L: {
-    L: (x, y) => ({ face: 'B', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    L: (x, y) => ({ face: 'B', gx: CUT_GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
     R: (x, y) => ({ face: 'F', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
     U: (x, y) => ({ face: 'U', gx: 0, gy: x, dir: { dx: 1, dy: 0 } }),
-    D: (x, y) => ({ face: 'D', gx: 0, gy: GRID_SIZE - 1 - x, dir: { dx: 1, dy: 0 } }),
+    D: (x, y) => ({ face: 'D', gx: 0, gy: CUT_GRID_SIZE - 1 - x, dir: { dx: 1, dy: 0 } }),
   },
   U: {
     L: (x, y) => ({ face: 'L', gx: y, gy: 0, dir: { dx: 0, dy: 1 } }),
-    R: (x, y) => ({ face: 'R', gx: GRID_SIZE - 1 - y, gy: 0, dir: { dx: 0, dy: 1 } }),
-    U: (x, y) => ({ face: 'B', gx: GRID_SIZE - 1 - x, gy: 0, dir: { dx: 0, dy: 1 } }),
+    R: (x, y) => ({ face: 'R', gx: CUT_GRID_SIZE - 1 - y, gy: 0, dir: { dx: 0, dy: 1 } }),
+    U: (x, y) => ({ face: 'B', gx: CUT_GRID_SIZE - 1 - x, gy: 0, dir: { dx: 0, dy: 1 } }),
     D: (x, y) => ({ face: 'F', gx: x, gy: 0, dir: { dx: 0, dy: 1 } }),
   },
   D: {
-    L: (x, y) => ({ face: 'L', gx: GRID_SIZE - 1 - y, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
-    R: (x, y) => ({ face: 'R', gx: y, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
-    U: (x, y) => ({ face: 'F', gx: x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
-    D: (x, y) => ({ face: 'B', gx: GRID_SIZE - 1 - x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    L: (x, y) => ({ face: 'L', gx: CUT_GRID_SIZE - 1 - y, gy: CUT_GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    R: (x, y) => ({ face: 'R', gx: y, gy: CUT_GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    U: (x, y) => ({ face: 'F', gx: x, gy: CUT_GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    D: (x, y) => ({ face: 'B', gx: CUT_GRID_SIZE - 1 - x, gy: CUT_GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
   },
 };
 
@@ -455,26 +455,11 @@ function cubeVector(faceKey, u01, v01) {
     .add(face.d.clone().multiplyScalar(v01 * 2 - 1));
 }
 
-function cubeCellVector(faceKey, gx, gy) {
-  return cubeVector(faceKey, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
-}
 
 function cubeSpherePoint(faceKey, u01, v01) {
   return cubeVector(faceKey, u01, v01).normalize().multiplyScalar(getR());
 }
 
-function cubeFaceFromNormal(normal) {
-  let bestFace = 'F';
-  let bestDot = -Infinity;
-  for (const [faceKey, face] of Object.entries(CUBE_FACES)) {
-    const score = face.n.dot(normal);
-    if (score > bestDot) {
-      bestDot = score;
-      bestFace = faceKey;
-    }
-  }
-  return bestFace;
-}
 
 function createCubeSphereGeometry() {
   const segments = 32;
@@ -550,13 +535,21 @@ function genus2Field(x, y, z) {
   return smoothMin(left, right, GENUS2_SMOOTH * fieldScale);
 }
 
+function genus2FieldGradient(x, y, z) {
+  const offset = GENUS2_CENTER_OFFSET * fieldScale;
+  function torus(cx) {
+    const px = x - cx, radial = Math.max(1e-12, Math.hypot(px, y));
+    const q = radial - GENUS2_RING_R * fieldScale, length = Math.max(1e-12, Math.hypot(q, z));
+    return { distance: length - GENUS2_TUBE_R * fieldScale,
+      gradient: new THREE.Vector3(q * px / (length * radial), q * y / (length * radial), z / length) };
+  }
+  const a = torus(-offset), b = torus(offset);
+  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b.distance - a.distance) / (GENUS2_SMOOTH * fieldScale)));
+  return a.gradient.multiplyScalar(h).addScaledVector(b.gradient, 1 - h);
+}
+
 function estimateGenus2Normal(x, y, z) {
-  const e = 0.008 * fieldScale;
-  return new THREE.Vector3(
-    genus2Field(x + e, y, z) - genus2Field(x - e, y, z),
-    genus2Field(x, y + e, z) - genus2Field(x, y - e, z),
-    genus2Field(x, y, z + e) - genus2Field(x, y, z - e),
-  ).normalize();
+  return genus2FieldGradient(x, y, z).normalize();
 }
 
 const GENUS2_FACE_DIRECTIONS = [
@@ -700,11 +693,13 @@ function genus2RawPoint(faceKey, u, v) {
 
 function projectToGenus2Surface(point) {
   const p = point.clone();
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 16; i++) {
     const value = genus2Field(p.x, p.y, p.z);
-    if (Math.abs(value) < 0.0008 * fieldScale) break;
-    const normal = estimateGenus2Normal(p.x, p.y, p.z);
-    p.addScaledVector(normal, -value);
+    // The position tolerance must be finer than the navigation derivative.
+    // The former coarse tolerance introduced jumps in the tangent frame.
+    if (Math.abs(value) < 1e-10 * fieldScale) break;
+    const gradient = genus2FieldGradient(p.x, p.y, p.z);
+    p.addScaledVector(gradient, -value / Math.max(1e-12, gradient.lengthSq()));
   }
   return p;
 }
@@ -841,17 +836,18 @@ function genus2CutPathDefs() {
   return [
     {
       label: 'a',
+      // This orientation matches the a,c,A order on the shared stem.
       vertices: [
         genus2CutWaypoint(base, h, h),
         genus2CutWaypoint(base, 0, h),
-        genus2CutWaypoint(base, 0, 0),
-        genus2CutWaypoint('G2_-1_1_0_PZ', n, n),
-        genus2CutWaypoint('G2_-1_1_0_PZ', 0, n),
-        genus2CutWaypoint('G2_-2_0_0_PZ', n, 0),
-        genus2CutWaypoint('G2_-2_0_0_PZ', n, n),
-        genus2CutWaypoint('G2_-1_-1_0_PZ', 0, 0),
-        genus2CutWaypoint('G2_-1_-1_0_PZ', n, 0),
         genus2CutWaypoint(base, 0, n),
+        genus2CutWaypoint('G2_-1_-1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_-1_-1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-2_0_0_PZ', n, n),
+        genus2CutWaypoint('G2_-2_0_0_PZ', n, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_-1_1_0_PZ', n, n),
+        genus2CutWaypoint(base, 0, 0),
         genus2CutWaypoint(base, 0, h),
         genus2CutWaypoint(base, h, h),
       ],
@@ -1185,21 +1181,7 @@ function projectiveSquareToDisk(a, b) {
 }
 
 function projectivePointUV(u01, v01) {
-  const a = u01 * 2 - 1;
-  const b = v01 * 2 - 1;
-  const disk = projectiveSquareToDisk(a, b);
-  const radius = Math.min(1, Math.hypot(disk.x, disk.y));
-  const theta = Math.atan2(disk.y, disk.x);
-  const v = radius * Math.PI / 2;
-  const x = Math.cos(theta) * Math.sin(2 * v);
-  const y = Math.sin(theta) * Math.sin(2 * v);
-  const z = Math.cos(v) ** 2 - Math.cos(theta) ** 2 * Math.sin(v) ** 2;
-  const s = 1.35 * fieldScale;
-  return new THREE.Vector3(
-    x * s,
-    z * s * 0.78,
-    y * s,
-  );
+  return boySurfacePoint(THREE, u01, v01, 1.1 * fieldScale);
 }
 
 function createProjectiveGeometry() {
@@ -1389,6 +1371,7 @@ function stopSurfaceDrag(e) {
 
 renderer.domElement.addEventListener('pointerup', stopSurfaceDrag);
 renderer.domElement.addEventListener('pointercancel', stopSurfaceDrag);
+renderer.domElement.addEventListener('lostpointercapture', stopSurfaceDrag);
 renderer.domElement.addEventListener('wheel', e => {
   e.preventDefault();
   const distance = camera.position.length();
@@ -1409,13 +1392,13 @@ texCanvas.width = TEX_SIZE;
 texCanvas.height = TEX_SIZE;
 markCanvasFront.width = markCanvasBack.width = TEX_SIZE;
 markCanvasFront.height = markCanvasBack.height = TEX_SIZE;
-const cellPx = TEX_SIZE / GRID_SIZE;
+const cellPx = TEX_SIZE / CUT_GRID_SIZE;
 
-const gridTex = new THREE.CanvasTexture(texCanvas);
-gridTex.wrapS = gridTex.wrapT = THREE.ClampToEdgeWrapping;
-gridTex.colorSpace = THREE.SRGBColorSpace;
+const surfaceTex = new THREE.CanvasTexture(texCanvas);
+surfaceTex.wrapS = surfaceTex.wrapT = THREE.ClampToEdgeWrapping;
+surfaceTex.colorSpace = THREE.SRGBColorSpace;
 // Keep canvas row 0 aligned with each parametrized face's v=0 edge.
-gridTex.flipY = false;
+surfaceTex.flipY = false;
 const markTexFront = new THREE.CanvasTexture(markCanvasFront);
 const markTexBack = new THREE.CanvasTexture(markCanvasBack);
 markTexFront.wrapS = markTexFront.wrapT = THREE.ClampToEdgeWrapping;
@@ -1471,56 +1454,6 @@ function createMarkMaterial(map, side) {
   });
 }
 
-function textureCellPx() {
-  if (MAP_TYPE === 'sphere') return SPHERE_FACE_TEX_SIZE / GRID_SIZE;
-  if (MAP_TYPE === 'genus2') return GENUS2_FACE_TEX_SIZE / GENUS2_PATCH_CELLS;
-  return TEX_SIZE / GRID_SIZE;
-}
-
-function markContextFor(item) {
-  if (MAP_TYPE === 'sphere') {
-    return sphereMarkCtxFront[item.face || 'F'];
-  }
-  if (MAP_TYPE === 'genus2') {
-    return genus2MarkCtx[item.face || genus2StartFaceKey()];
-  }
-  return item.side === -1 ? markCtxBack : markCtxFront;
-}
-
-function cellCenter(gx, gy, face = 'F') {
-  const size = MAP_TYPE === 'sphere'
-    ? SPHERE_FACE_TEX_SIZE
-    : (MAP_TYPE === 'genus2' ? GENUS2_FACE_TEX_SIZE : TEX_SIZE);
-  const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
-  const px = size / gridSize;
-  return {
-    x: (gx + 0.5) * px,
-    y: (gy + 0.5) * px,
-  };
-}
-
-function drawSurfaceGrid(ctx, size) {
-  if (MAP_TYPE === 'projective') {
-    ctx.strokeStyle = 'rgba(255,253,235,0.20)';
-    ctx.lineWidth = 1;
-    const px = size / GRID_SIZE;
-    for (let i = 1; i < GRID_SIZE; i++) {
-      const pos = i * px;
-      ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
-    }
-    return;
-  }
-  ctx.strokeStyle = 'rgba(255,253,235,0.28)';
-  ctx.lineWidth = 1;
-  const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
-  const px = size / gridSize;
-  for (let i = 0; i <= gridSize; i++) {
-    const pos = i * px;
-    ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
-  }
-}
 
 function drawCutLabel(ctx, label, x, y, color, radius) {
   ctx.save();
@@ -1563,7 +1496,7 @@ function drawTorusCutMarks(ctx) {
 function drawProjectiveCutMarks(ctx) {
   if (MAP_TYPE !== 'projective') return;
   const size = TEX_SIZE;
-  const px = TEX_SIZE / GRID_SIZE;
+  const px = TEX_SIZE / CUT_GRID_SIZE;
   ctx.save();
   ctx.globalAlpha = 0.96;
   ctx.lineCap = 'round';
@@ -1580,7 +1513,7 @@ function drawProjectiveCutMarks(ctx) {
 function drawKleinCutMarks(ctx) {
   if (MAP_TYPE !== 'klein') return;
   const size = TEX_SIZE;
-  const px = TEX_SIZE / GRID_SIZE;
+  const px = TEX_SIZE / CUT_GRID_SIZE;
   const x = KLEIN_CUT_A_X * px;
   const y = KLEIN_CUT_B_Y * px;
   ctx.save();
@@ -1598,41 +1531,6 @@ function drawKleinCutMarks(ctx) {
   ctx.restore();
 }
 
-function drawGenus2CutMark(ctx, cut) {
-  const px = GENUS2_FACE_TEX_SIZE / GENUS2_PATCH_CELLS;
-  let x1, y1, x2, y2;
-  if (cut.edge === 'L') {
-    x1 = x2 = cut.gx * px;
-    y1 = cut.gy * px;
-    y2 = (cut.gy + 1) * px;
-  } else if (cut.edge === 'R') {
-    x1 = x2 = (cut.gx + 1) * px;
-    y1 = cut.gy * px;
-    y2 = (cut.gy + 1) * px;
-  } else if (cut.edge === 'U') {
-    x1 = cut.gx * px;
-    x2 = (cut.gx + 1) * px;
-    y1 = y2 = cut.gy * px;
-  } else {
-    x1 = cut.gx * px;
-    x2 = (cut.gx + 1) * px;
-    y1 = y2 = (cut.gy + 1) * px;
-  }
-
-  ctx.save();
-  ctx.globalAlpha = 0.98;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = cut.color;
-  ctx.lineWidth = 18;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-  if (cut.showLabel) {
-    drawCutLabel(ctx, cut.label, (x1 + x2) / 2, (y1 + y2) / 2, cut.color, px * 0.24);
-  }
-  ctx.restore();
-}
 
 function drawTopologyCutMarks() {
   if (!topologyHintsVisible) return;
@@ -1644,7 +1542,7 @@ function drawTopologyCutMarks() {
 
 let textureHintState = null;
 function redrawTexture() {
-  // Grid and cut textures are static between hint toggles. Actors are meshes.
+  // Surface and cut textures are static between hint toggles. Actors are meshes.
   if (textureHintState === topologyHintsVisible) return;
   textureHintState = topologyHintsVisible;
   const ctx = texCtx;
@@ -1654,7 +1552,7 @@ function redrawTexture() {
   ctx.fillStyle = SURFACE_PALETTE[MAP_TYPE];
   ctx.fillRect(0, 0, size, size);
 
-  drawSurfaceGrid(ctx, size);
+  // The surface has no movement grid; optional cut marks remain available.
 
   markCtxFront.clearRect(0, 0, size, size);
   markCtxBack.clearRect(0, 0, size, size);
@@ -1668,7 +1566,7 @@ function redrawTexture() {
 
   drawTopologyCutMarks();
 
-  gridTex.needsUpdate = true;
+  surfaceTex.needsUpdate = true;
   markTexFront.needsUpdate = true;
   markTexBack.needsUpdate = true;
   for (const faceKey of CUBE_FACE_KEYS) {
@@ -1683,136 +1581,163 @@ function redrawTexture() {
 /* ===========================
    COORDINATE SYSTEM
    =========================== */
-// These coordinates follow the rendered UVs, including the torus mesh's XY
-// orientation. They are deliberately separate from movement/cut calculations.
-function visualCellPoint(gx, gy, face = null) {
-  const n = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
-  const u = (gx + 0.5) / n, v = (gy + 0.5) / n;
-  if (MAP_TYPE === 'sphere') return cubeSpherePoint(face || 'F', u, v);
-  if (MAP_TYPE === 'genus2') return genus2SurfacePoint(face || genus2StartFaceKey(), u, v);
-  if (MAP_TYPE === 'projective') return projectivePointUV(u, v);
-  if (MAP_TYPE === 'mobius') return mobiusPointUV(u, v);
-  if (MAP_TYPE === 'klein') return kleinPointUV(u, v);
-  const theta = u * Math.PI * 2, phi = v * Math.PI * 2;
+// Shared parametrizations for continuous motion and 3D rendering.
+// Topological cuts use a reference cell decomposition, without snapping motion.
+function surfacePoint(p) {
+  if (MAP_TYPE === 'sphere') return cubeSpherePoint(p.face || 'F', p.u, p.v);
+  if (MAP_TYPE === 'genus2') return genus2SurfacePoint(p.face || genus2StartFaceKey(), p.u, p.v);
+  if (MAP_TYPE === 'projective') return projectivePointUV(p.u, p.v);
+  if (MAP_TYPE === 'mobius') return mobiusPointUV(p.u, p.v);
+  if (MAP_TYPE === 'klein') return kleinPointUV(p.u, p.v);
+  const theta = p.u * Math.PI * 2, phi = p.v * Math.PI * 2;
   const radial = getR() + getr() * Math.cos(phi);
   return new THREE.Vector3(radial * Math.cos(theta), radial * Math.sin(theta), getr() * Math.sin(phi));
 }
 
-function visualCellFrame(item, heading = null, toward = null) {
-  const { gx, gy, face } = item;
-  const position = visualCellPoint(gx, gy, face);
-  const h = 0.02;
-  const du = visualCellPoint(gx + h, gy, face).sub(visualCellPoint(gx - h, gy, face)).multiplyScalar(1 / (2 * h));
-  const dv = visualCellPoint(gx, gy + h, face).sub(visualCellPoint(gx, gy - h, face)).multiplyScalar(1 / (2 * h));
-  let normal;
-  if (MAP_TYPE === 'sphere') normal = position.clone().normalize();
-  else if (MAP_TYPE === 'genus2') normal = estimateGenus2Normal(position.x, position.y, position.z);
-  else normal = new THREE.Vector3().crossVectors(du, dv).normalize();
-  // Preserve the existing RP² chart/state model; its display normal at the
-  // starting patch faces inward, so its sculpted pieces use the reverse normal.
-  normal.multiplyScalar((item.side ?? 1) * (MAP_TYPE === 'projective' ? -1 : 1));
-  const dir = heading || (toward && inferStepDirection(item, toward)) || { dx: 1, dy: 0 };
-  const forward = du.clone().multiplyScalar(dir.dx).addScaledVector(dv, dir.dy).normalize();
-  const radius = THREE.MathUtils.clamp(Math.min(du.length(), dv.length()) * 0.49, 0.025 * fieldScale, 0.12 * fieldScale);
-  const stepLength = dir.dx ? du.length() : dv.length();
-  return { position, normal, forward, radius,
-    length: THREE.MathUtils.clamp(stepLength * 0.54, radius, radius * 3.2),
-    reach: Math.max(du.length(), dv.length()) * 1.8,
+function continuousPatchTransition(p, edge) {
+  const horizontal = edge === 'L' || edge === 'R';
+  let start, end, targetFace, inward;
+  if (MAP_TYPE === 'sphere') {
+    const span = CUT_GRID_SIZE - 1;
+    const transition = CUBE_TRANSITIONS[p.face || 'F'][edge];
+    const at = t => transition(
+      horizontal ? (edge === 'L' ? 0 : span) : t * span,
+      horizontal ? t * span : (edge === 'U' ? 0 : span),
+    );
+    const a = at(0), b = at(1);
+    start = { u: a.gx / span, v: a.gy / span };
+    end = { u: b.gx / span, v: b.gy / span };
+    targetFace = a.face; inward = { u: a.dir.dx, v: a.dir.dy };
+  } else {
+    const topology = getGenus2Topology();
+    const face = topology.faceMap.get(p.face);
+    const transition = face.transitions[edge];
+    const target = topology.faceMap.get(transition.face);
+    start = genus2LocalUVFromVoxel(target, genus2EdgePoint(face, edge, 0));
+    end = genus2LocalUVFromVoxel(target, genus2EdgePoint(face, edge, 1));
+    targetFace = transition.face;
+    const direction = genus2InwardDirection(transition.edge);
+    inward = { u: direction.dx, v: direction.dy };
+  }
+  const sign = edge === 'L' || edge === 'U' ? -1 : 1;
+  const distance = edge === 'L' ? -p.u : edge === 'R' ? p.u - 1 : edge === 'U' ? -p.v : p.v - 1;
+  const t = horizontal ? p.v : p.u;
+  const tangent = horizontal ? p.dv : p.du;
+  const outward = sign * (horizontal ? p.du : p.dv);
+  return { ...p, face: targetFace,
+    u: start.u + (end.u - start.u) * t + inward.u * distance,
+    v: start.v + (end.v - start.v) * t + inward.v * distance,
+    du: (end.u - start.u) * tangent + inward.u * outward,
+    dv: (end.v - start.v) * tangent + inward.v * outward,
   };
 }
 
-function visualFrameBetween(from, to, t) {
-  const dir = inferStepDirection(from, to);
-  if (!dir) return null;
-  // Sample each half on its own chart, so cube/patch seams never create a
-  // straight shortcut through the surface. The discrete move is read only.
-  if (t <= 0.5) {
-    return visualCellFrame({ ...from, gx: from.gx + dir.dx * t, gy: from.gy + dir.dy * t }, dir);
+const navigation = createSurfaceNavigator({
+  THREE, mapType: MAP_TYPE, resolution: MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : CUT_GRID_SIZE,
+  pointAt: surfacePoint, patchTransition: continuousPatchTransition,
+  normalAt: (p, position, du, dv) => {
+    if (MAP_TYPE === 'sphere') return position.clone().normalize();
+    if (MAP_TYPE === 'genus2') return estimateGenus2Normal(position.x, position.y, position.z);
+    return new THREE.Vector3().crossVectors(du, dv)
+      .multiplyScalar((p.side ?? 1) * (MAP_TYPE === 'projective' ? -1 : 1));
+  },
+  advanceTopology: advanceTopologyState, cloneTopology: cloneTopologyState, emptyTopology: emptyTopologyState,
+});
+
+function atlasSpherePoint(p) {
+  if (MAP_TYPE === 'sphere') return cubeSpherePoint(p.face || 'F', p.u, p.v).normalize();
+  const disk = projectiveSquareToDisk(2 * p.u - 1, 2 * p.v - 1);
+  const r = Math.min(1, Math.hypot(disk.x, disk.y)), angle = r * Math.PI / 2;
+  const scale = r > 1e-10 ? Math.sin(angle) / r : Math.PI / 2;
+  return new THREE.Vector3(disk.x * scale, disk.y * scale, Math.cos(angle));
+}
+
+function atlasPointFromSphere(s) {
+  if (MAP_TYPE === 'sphere') {
+    let face = 'F';
+    for (const key of CUBE_FACE_KEYS) if (s.dot(CUBE_FACES[key].n) > s.dot(CUBE_FACES[face].n)) face = key;
+    const basis = CUBE_FACES[face], denominator = s.dot(basis.n);
+    return { face, u: (s.dot(basis.r) / denominator + 1) / 2, v: (s.dot(basis.d) / denominator + 1) / 2 };
   }
-  const next = normalizeGridPosition(from.gx + dir.dx, from.gy + dir.dy, dir, from.side, from.face);
-  return visualCellFrame({ ...to, gx: to.gx - next.dir.dx * (1 - t), gy: to.gy - next.dir.dy * (1 - t) }, next.dir);
+  const n = s.clone();
+  if (n.z < 0) n.negate();
+  const sine = Math.hypot(n.x, n.y), radius = Math.atan2(sine, n.z) * 2 / Math.PI;
+  const x = sine > 1e-10 ? n.x * radius / sine : 0, y = sine > 1e-10 ? n.y * radius / sine : 0;
+  const difference = x * x - y * y;
+  const aa = 2 + difference, bb = 2 - difference;
+  const a = Math.sign(x) * Math.sqrt(Math.max(0, (aa - Math.sqrt(Math.max(0, aa * aa - 8 * x * x))) / 2));
+  const b = Math.sign(y) * Math.sqrt(Math.max(0, (bb - Math.sqrt(Math.max(0, bb * bb - 8 * y * y))) / 2));
+  return { face: null, u: Math.max(0, Math.min(1, (a + 1) / 2)), v: Math.max(0, Math.min(1, (b + 1) / 2)) };
+}
+
+const atlas = createSurfaceAtlas({ THREE, navigation, mapType: MAP_TYPE,
+  sphereAt: atlasSpherePoint, sphereToPoint: atlasPointFromSphere, sphereScale: MAP_TYPE === 'projective' ? 1.35 : BASE_R,
+  implicitSurface: MAP_TYPE === 'genus2' ? {
+    value: p => genus2Field(p.x, p.y, p.z),
+    gradient: p => genus2FieldGradient(p.x, p.y, p.z),
+  } : null });
+navigation.setChartFactory(reference => atlas.createChart(reference));
+
+function randomSurfacePoint(random) {
+  const face = MAP_TYPE === 'sphere' ? CUBE_FACE_KEYS[Math.floor(random() * CUBE_FACE_KEYS.length)]
+    : MAP_TYPE === 'genus2' ? getGenus2Topology().faces[Math.floor(random() * getGenus2Topology().faces.length)].key : null;
+  const side = (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') && random() < 0.5 ? -1 : 1;
+  return navigation.seed(0.015 + random() * 0.97, 0.015 + random() * 0.97, face, side);
+}
+
+function handleContinuousEvent(event) {
+  if (event.type === 'crossing') {
+    if (topologyStateFormula(event.from.topo) !== topologyStateFormula(event.topo)) {
+      pi1LastStep = describeTopologyMove(event.from, event.move);
+    }
+    return;
+  }
+  if (event.type === 'grow') {
+    if (event.score > best) {
+      best = event.score;
+      localStorage.setItem('snake3dBest_' + MAP_TYPE, best);
+    }
+    addMsg(tr('grew'), 'good');
+  } else if (event.type === 'shrink') addMsg(tr('shortened'), 'warn');
+  else if (event.type === 'slow') addMsg(tr('slowed'), 'good');
+  else if (event.type === 'speedUp') addMsg(tr('spedUp'), 'warn');
+  else if (event.type === 'cut') addMsg(event.info.failLabel || tr('failTrivial'), 'warn');
+  else if (event.type === 'win') {
+    clearMsgTimer();
+    setMsg(event.info.winText || tr('winNontrivial', { label: event.info.label }), 'good');
+  }
+}
+
+const continuousGame = createContinuousSnake({
+  navigation, classifyLoop: topologyDifferenceInfo, randomPoint: randomSurfacePoint,
+  initialSpeed: THREE.MathUtils.clamp(0.9 * 150 / INITIAL_SPEED_MS, 0.35, 2.5),
+  foodWeights: Object.fromEntries(Object.entries(FOOD_DEF).map(([name, def]) => [name, def.weight])),
+  onEvent: handleContinuousEvent,
+});
+
+function syncContinuousState() {
+  const state = continuousGame.state();
+  snake = state.snake; foods = state.foods; direction = state.direction;
+  score = state.score; speed = state.speed; running = state.running; paused = state.paused;
+  return state;
+}
+
+function visualCellFrame(item) {
+  const frame = navigation.frame(item);
+  const state = continuousGame.state();
+  return { position: frame.position, normal: frame.normal, forward: frame.forward,
+    radius: state.radius, length: state.spacing * 0.65, reach: state.radius * 4.2 };
+}
+
+function visualFrameBetween(from, to, t) {
+  return visualCellFrame(continuousGame.sampleAt(from.s + (to.s - from.s) * t));
 }
 
 const clayActors = createClayActors({
   THREE, parent: surfaceGroup, frameAt: visualCellFrame, frameBetween: visualFrameBetween,
-  getState: () => ({ snake, foods, direction, running, paused, score, speed, scale: fieldScale, foodLifetime: FOOD_LIFETIME }),
+  getState: () => continuousGame.state(),
 });
 
-function to3D(gx, gy, face = 'F') {
-  if (MAP_TYPE === 'genus2') {
-    const p = genus2Point(gx, gy, face || genus2StartFaceKey());
-    return { x: p.x, y: p.y, z: p.z };
-  }
-  if (MAP_TYPE === 'projective') {
-    const p = projectivePointUV((gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
-    return { x: p.x, y: p.y, z: p.z };
-  }
-  if (MAP_TYPE === 'sphere') {
-    const p = cubeSpherePoint(face, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
-    return { x: p.x, y: p.y, z: p.z };
-  }
-  if (MAP_TYPE === 'mobius') {
-    const p = mobiusPointUV(gx / GRID_SIZE, gy / (GRID_SIZE - 1));
-    return { x: p.x, y: p.y, z: p.z };
-  }
-  if (MAP_TYPE === 'klein') {
-    const p = kleinPointUV(gx / GRID_SIZE, gy / GRID_SIZE);
-    return { x: p.x, y: p.y, z: p.z };
-  }
-  const R = getR();
-  const r = getr();
-  const theta = (gx / GRID_SIZE) * Math.PI * 2;
-  const cosTheta = Math.cos(theta);
-  const sinTheta = Math.sin(theta);
-  const phi = (gy / GRID_SIZE) * Math.PI * 2;
-  const cosPhi = Math.cos(phi);
-  const sinPhi = Math.sin(phi);
-  return {
-    x: (R + r * cosPhi) * cosTheta,
-    y: r * sinPhi,
-    z: (R + r * cosPhi) * sinTheta,
-  };
-}
-
-function surfaceNormal(gx, gy, face = 'F') {
-  if (MAP_TYPE === 'genus2') {
-    const p = genus2Point(gx, gy, face || genus2StartFaceKey());
-    return estimateGenus2Normal(p.x, p.y, p.z);
-  }
-  if (MAP_TYPE === 'projective') {
-    const u = gx / GRID_SIZE;
-    const v = gy / GRID_SIZE;
-    const step = 1 / GRID_SIZE;
-    const du = projectivePointUV(u + step, v).sub(projectivePointUV(u - step, v));
-    const dv = projectivePointUV(u, v + step).sub(projectivePointUV(u, v - step));
-    return new THREE.Vector3().crossVectors(du, dv).normalize();
-  }
-  if (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') {
-    const u = gx / GRID_SIZE;
-    const v = MAP_TYPE === 'mobius' ? gy / (GRID_SIZE - 1) : gy / GRID_SIZE;
-    const pointFn = MAP_TYPE === 'mobius' ? mobiusPointUV : kleinPointUV;
-    const du = pointFn(u + 1 / GRID_SIZE, v).sub(pointFn(u - 1 / GRID_SIZE, v));
-    const dvStep = 1 / (GRID_SIZE - 1);
-    const dv = pointFn(u, v + dvStep).sub(pointFn(u, v - dvStep));
-    return new THREE.Vector3().crossVectors(du, dv).normalize();
-  }
-  if (MAP_TYPE === 'sphere') {
-    return cubeSpherePoint(face, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE).normalize();
-  }
-  const R = getR();
-  const r = getr();
-  const theta = (gx / GRID_SIZE) * Math.PI * 2;
-  const cosTheta = Math.cos(theta);
-  const sinTheta = Math.sin(theta);
-  const phi = (gy / GRID_SIZE) * Math.PI * 2;
-  const cosPhi = Math.cos(phi);
-  const sinPhi = Math.sin(phi);
-  return new THREE.Vector3(
-    cosPhi * cosTheta,
-    sinPhi,
-    cosPhi * sinTheta,
-  );
-}
 
 function disposeMaterial(material) {
   if (Array.isArray(material)) {
@@ -1927,8 +1852,8 @@ function projectiveBoundaryOverlayPoints() {
 }
 
 function kleinCutOverlayPaths() {
-  const uA = KLEIN_CUT_A_X / GRID_SIZE;
-  const vB = KLEIN_CUT_B_Y / GRID_SIZE;
+  const uA = KLEIN_CUT_A_X / CUT_GRID_SIZE;
+  const vB = KLEIN_CUT_B_Y / CUT_GRID_SIZE;
   return [
     {
       label: 'a',
@@ -1981,56 +1906,18 @@ function createCutOverlayGroup() {
    SNAKE
    =========================== */
 let snake = [];
-let direction, nextDir, chartDisplayDir, chartMirror;
+let direction;
 let pi1LastStep = null;
 
 function wrapGrid(v) {
-  return ((v % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
+  return ((v % CUT_GRID_SIZE) + CUT_GRID_SIZE) % CUT_GRID_SIZE;
 }
 
-function clampCell(v) {
-  return Math.max(0, Math.min(GRID_SIZE - 1, v));
-}
 
 function clampGenus2Cell(v) {
   return Math.max(0, Math.min(GENUS2_PATCH_CELLS - 1, v));
 }
 
-function normalizeCubeSpherePosition(gx, gy, dir, side, faceKey) {
-  let currentFace = faceKey || 'F';
-  let ndir = dir ? { ...dir } : null;
-  let guard = 0;
-  while ((gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) && guard++ < 12) {
-    let edge;
-    let overshoot;
-    if (gx < 0) {
-      edge = 'L';
-      overshoot = -gx - 1;
-    } else if (gx >= GRID_SIZE) {
-      edge = 'R';
-      overshoot = gx - GRID_SIZE;
-    } else if (gy < 0) {
-      edge = 'U';
-      overshoot = -gy - 1;
-    } else {
-      edge = 'D';
-      overshoot = gy - GRID_SIZE;
-    }
-
-    const transition = CUBE_TRANSITIONS[currentFace][edge](clampCell(gx), clampCell(gy));
-    ndir = transition.dir;
-    gx = transition.gx + ndir.dx * overshoot;
-    gy = transition.gy + ndir.dy * overshoot;
-    currentFace = transition.face;
-  }
-  return {
-    gx: clampCell(gx),
-    gy: clampCell(gy),
-    dir: ndir,
-    side,
-    face: currentFace,
-  };
-}
 
 function genus2InwardDirection(edge) {
   if (edge === 'L') return { dx: 1, dy: 0 };
@@ -2106,65 +1993,6 @@ function normalizeGenus2Position(gx, gy, dir, side, faceKey) {
   };
 }
 
-function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
-  const ndir = dir ? { ...dir } : null;
-  let nside = side;
-  let mirror = 1;
-
-  if (MAP_TYPE === 'sphere') {
-    return normalizeCubeSpherePosition(gx, gy, ndir, nside, face || 'F');
-  }
-
-  if (MAP_TYPE === 'genus2') {
-    return normalizeGenus2Position(gx, gy, ndir, nside, face || genus2StartFaceKey());
-  }
-
-  if (MAP_TYPE === 'projective') {
-    while (gx < 0 || gx >= GRID_SIZE) {
-      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
-      gy = GRID_SIZE - 1 - gy;
-      mirror *= -1;
-      if (ndir) ndir.dy *= -1;
-    }
-    while (gy < 0 || gy >= GRID_SIZE) {
-      gy += gy < 0 ? GRID_SIZE : -GRID_SIZE;
-      gx = GRID_SIZE - 1 - gx;
-      mirror *= -1;
-      if (ndir) ndir.dx *= -1;
-    }
-    return { gx, gy, dir: ndir, side: 1, mirror };
-  }
-
-  if (MAP_TYPE === 'mobius') {
-    while (gx < 0 || gx >= GRID_SIZE) {
-      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
-      gy = GRID_SIZE - 1 - gy;
-      nside *= -1;
-      mirror *= -1;
-      if (ndir) ndir.dy *= -1;
-    }
-    while (gy < 0 || gy >= GRID_SIZE) {
-      gy = gy < 0 ? -gy - 1 : (GRID_SIZE - 1) - (gy - GRID_SIZE);
-      nside *= -1;
-      mirror *= -1;
-      if (ndir) ndir.dy *= -1;
-    }
-    return { gx, gy, dir: ndir, side: nside, mirror };
-  }
-
-  if (MAP_TYPE === 'klein') {
-    while (gx < 0 || gx >= GRID_SIZE) {
-      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
-      gy = wrapGrid(GRID_SIZE / 2 - 1 - gy);
-      nside *= -1;
-      mirror *= -1;
-      if (ndir) ndir.dy *= -1;
-    }
-    return { gx, gy: wrapGrid(gy), dir: ndir, side: nside, mirror };
-  }
-
-  return { gx: wrapGrid(gx), gy: wrapGrid(gy), dir: ndir, side: nside, mirror };
-}
 
 function inverseLetter(letter) {
   return letter === letter.toLowerCase() ? letter.toUpperCase() : letter.toLowerCase();
@@ -2329,9 +2157,9 @@ function cloneTopologyState(state) {
 function torusStepDelta(from, moveDir) {
   let wx = 0;
   let wy = 0;
-  if (moveDir.dx === 1 && (from.gx + 1) % GRID_SIZE === TORUS_CUT_X) wx = 1;
+  if (moveDir.dx === 1 && (from.gx + 1) % CUT_GRID_SIZE === TORUS_CUT_X) wx = 1;
   if (moveDir.dx === -1 && from.gx === TORUS_CUT_X) wx = -1;
-  if (moveDir.dy === 1 && (from.gy + 1) % GRID_SIZE === TORUS_CUT_Y) wy = 1;
+  if (moveDir.dy === 1 && (from.gy + 1) % CUT_GRID_SIZE === TORUS_CUT_Y) wy = 1;
   if (moveDir.dy === -1 && from.gy === TORUS_CUT_Y) wy = -1;
   return { wx, wy };
 }
@@ -2439,9 +2267,9 @@ function genus2StepWord(from, moveDir) {
 }
 
 function boundaryCrossingEdge(from, moveDir) {
-  if (moveDir.dx === 1 && from.gx === GRID_SIZE - 1) return 'R';
+  if (moveDir.dx === 1 && from.gx === CUT_GRID_SIZE - 1) return 'R';
   if (moveDir.dx === -1 && from.gx === 0) return 'L';
-  if (moveDir.dy === 1 && from.gy === GRID_SIZE - 1) return 'D';
+  if (moveDir.dy === 1 && from.gy === CUT_GRID_SIZE - 1) return 'D';
   if (moveDir.dy === -1 && from.gy === 0) return 'U';
   return null;
 }
@@ -2453,9 +2281,9 @@ function projectiveStepWord(from, moveDir) {
 function mobiusStepDelta(from, moveDir) {
   let w = 0;
   let boundary = 0;
-  if (moveDir.dx === 1 && from.gx === GRID_SIZE - 1) w = 1;
+  if (moveDir.dx === 1 && from.gx === CUT_GRID_SIZE - 1) w = 1;
   if (moveDir.dx === -1 && from.gx === 0) w = -1;
-  if (moveDir.dy === 1 && from.gy === GRID_SIZE - 1) boundary = 1;
+  if (moveDir.dy === 1 && from.gy === CUT_GRID_SIZE - 1) boundary = 1;
   if (moveDir.dy === -1 && from.gy === 0) boundary = 1;
   return { w, boundary };
 }
@@ -2514,7 +2342,12 @@ function kleinStepWord(from, moveDir, state = from?.topo) {
 function advanceKleinTopologyState(state, from, moveDir) {
   const current = cloneTopologyState(state);
   const crossing = kleinStepCrossing(from, moveDir, current);
-  const nextYSign = crossing?.label === 'a'
+  // The cut is at u=1/2, while the parameter chart reverses v at u=0/1.
+  // Both change the local-to-cut frame. Missing the chart seam makes a small
+  // contractible rectangle there read bb instead of bB.
+  const seam = boundaryCrossingEdge(from, moveDir);
+  const flipsFrame = (crossing?.label === 'a') !== (seam === 'L' || seam === 'R');
+  const nextYSign = flipsFrame
     ? -current.frame.ySign
     : current.frame.ySign;
   return {
@@ -2558,45 +2391,6 @@ function advanceTopologyState(state, from, moveDir) {
   return null;
 }
 
-function inferStepDirection(from, to) {
-  const directions = [
-    { dx: 1, dy: 0 },
-    { dx: -1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: 0, dy: -1 },
-  ];
-  for (const dir of directions) {
-    const next = normalizeGridPosition(from.gx + dir.dx, from.gy + dir.dy, dir, from.side, from.face);
-    if (
-      !next.blocked &&
-      next.gx === to.gx &&
-      next.gy === to.gy &&
-      sameSurfaceSide(next.side, to.side) &&
-      sameSurfaceFace(next.face, to.face)
-    ) {
-      return dir;
-    }
-  }
-  return null;
-}
-
-function initializeSnakeTopology() {
-  if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return;
-  const states = new Array(snake.length);
-  let state = emptyTopologyState();
-  states[snake.length - 1] = cloneTopologyState(state);
-
-  for (let i = snake.length - 1; i > 0; i--) {
-    const dir = inferStepDirection(snake[i], snake[i - 1]);
-    if (dir) state = advanceTopologyState(state, snake[i], dir);
-    states[i - 1] = cloneTopologyState(state);
-  }
-
-  snake = snake.map((segment, i) => ({
-    ...segment,
-    topo: cloneTopologyState(states[i]),
-  }));
-}
 
 function wordFormula(word) {
   return word && word.length > 0 ? word.join('') : '1';
@@ -2820,7 +2614,7 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
 
   if (MAP_TYPE === 'mobius') {
     const w = (toTopo?.w || 0) - (fromTopo?.w || 0);
-    const boundary = (toTopo?.boundary || 0) - (fromTopo?.boundary || 0);
+    const boundary = Math.abs((toTopo?.boundary || 0) - (fromTopo?.boundary || 0));
     const crossesBoundary = boundary > 0;
     return {
       nontrivial: w !== 0 && !crossesBoundary,
@@ -2846,121 +2640,24 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
 
 function updatePi1Panel() {
   const panel = document.getElementById('pi1-panel');
-  if (!panel) return;
-  if (!topologyHintsVisible || !PI1_PANEL_MAPS.has(MAP_TYPE)) {
-    panel.style.display = 'none';
-    return;
-  }
-  panel.style.display = 'block';
+  panel.style.display = topologyHintsVisible && PI1_PANEL_MAPS.has(MAP_TYPE) ? 'block' : 'none';
+  if (!topologyHintsVisible || !PI1_PANEL_MAPS.has(MAP_TYPE) || !snake.length) return;
+  const head = snake[0], tail = snake[snake.length - 1];
+  const last = pi1LastStep || { step: tr('notMoved'), cut: '-', det: '-' };
   setPi1Text('pi1Rel', topologyRelationFormula());
-
-  const head = snake[0];
-  if (!head) return;
-  const tail = snake[snake.length - 1];
-
-  const last = pi1LastStep || {
-    step: tr('notMoved'),
-    move: '-',
-    cut: '-',
-    det: '-',
-  };
   setPi1Text('pi1Step', last.step, !!last.warn);
-  setPi1Text('pi1Move', last.move);
+  setPi1Text('pi1Move', '(' + head.u.toFixed(3) + ', ' + head.v.toFixed(3) + ')');
   setPi1Text('pi1Cut', last.cut);
   setPi1Text('pi1Det', last.det);
   setPi1Text('pi1Head', topologyStateFormula(head.topo));
   setPi1Text('pi1Tail', topologyStateFormula(tail.topo));
-
-  const bodyInfo = topologyDifferenceInfo(tail.topo, head.topo);
-  setPi1Text('pi1Body', `T^-1 H = ${bodyInfo.reducedLabel}`);
-
-  const dir = nextDir || direction;
-  if (!dir) {
-    setPi1Text('pi1Close', '-');
-    return;
-  }
-  const next = normalizeGridPosition(head.gx + dir.dx, head.gy + dir.dy, dir, head.side, head.face);
-  const hitSelfIdx = next.blocked
-    ? -1
-    : snake.findIndex(s => sameSnakeCell(s, next.gx, next.gy, next.side ?? 1, next.face ?? null));
-  if (hitSelfIdx === -1) {
-    setPi1Text('pi1Close', tr('nextNotClosed'));
-    return;
-  }
-
-  const newTopo = advanceTopologyState(head.topo, head, dir);
-  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
-  const loopInfo = topologyDifferenceInfo(hitTopo, newTopo);
-  const loopFormula = loopInfo.rawWord
-    ? `${wordFormula(loopInfo.rawWord)} -> ${loopInfo.reducedLabel}`
-    : loopInfo.reducedLabel;
-  setPi1Text(
-    'pi1Close',
-    `S${hitSelfIdx}^-1 H' = ${loopFormula} (${loopInfo.nontrivial ? tr('nontrivial') : tr('trivial')})`,
-    !loopInfo.nontrivial,
-  );
+  setPi1Text('pi1Body', 'T⁻¹ H = ' + topologyDifferenceInfo(tail.topo, head.topo).reducedLabel);
+  const closure = continuousGame.state().lastClosure;
+  setPi1Text('pi1Close', closure
+    ? closure.reducedLabel + ' (' + tr(closure.nontrivial ? 'nontrivial' : 'trivial') + ')'
+    : tr('nextNotClosed'), closure && !closure.nontrivial);
 }
 
-function selfClosureInfo(newTopo, hitSelfIdx) {
-  if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return null;
-  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
-  return topologyDifferenceInfo(hitTopo, newTopo);
-}
-
-function buildInitialSnake(head, length) {
-  const body = [{ ...head }];
-  const targetLength = Math.max(1, Math.floor(length));
-  let current = { ...head };
-  const backDir = { dx: -1, dy: 0 };
-
-  for (let i = 1; i < targetLength; i++) {
-    const next = normalizeGridPosition(
-      current.gx + backDir.dx,
-      current.gy + backDir.dy,
-      backDir,
-      current.side,
-      current.face,
-    );
-    if (next.blocked) break;
-    current = {
-      gx: next.gx,
-      gy: next.gy,
-      side: next.side ?? 1,
-      face: next.face ?? null,
-    };
-    body.push({ ...current });
-  }
-
-  return body;
-}
-
-function resetSnake() {
-  pi1LastStep = null;
-  if (MAP_TYPE === 'genus2') {
-    const face = genus2StartFaceKey();
-    const gy = Math.floor(GENUS2_PATCH_CELLS / 2);
-    snake = buildInitialSnake(
-      { gx: Math.floor(GENUS2_PATCH_CELLS / 2), gy, side: 1, face },
-      INITIAL_SNAKE_LENGTH,
-    );
-    direction = { dx: 1, dy: 0 };
-    nextDir = { dx: 1, dy: 0 };
-    chartDisplayDir = { dx: 1, dy: 0 };
-    chartMirror = 1;
-    initializeSnakeTopology();
-    return;
-  }
-  const face = MAP_TYPE === 'sphere' ? 'F' : null;
-  snake = buildInitialSnake(
-    { gx: Math.floor(GRID_SIZE / 2), gy: Math.floor(GRID_SIZE / 2), side: 1, face },
-    INITIAL_SNAKE_LENGTH,
-  );
-  direction = { dx: 1, dy: 0 };
-  nextDir = { dx: 1, dy: 0 };
-  chartDisplayDir = { dx: 1, dy: 0 };
-  chartMirror = 1;
-  initializeSnakeTopology();
-}
 
 /* ===========================
    FOOD
@@ -2972,11 +2669,7 @@ let foods = [];
    =========================== */
 let fieldScale = 1.0;
 let score, speed, best, running, paused;
-let spawnTimer;
 let msgTimer = null;
-let tickStartTime = 0;
-let tickInterval = 100;
-let loop = null;
 let topologyHintsVisible = false;
 
 function victoryGoalText() {
@@ -2990,6 +2683,7 @@ function victoryGoalText() {
 }
 
 function updateUI() {
+  syncContinuousState();
   document.getElementById('score').textContent = score;
   document.getElementById('best').textContent = best;
   document.getElementById('goalText').textContent = victoryGoalText();
@@ -2998,13 +2692,11 @@ function updateUI() {
   document.getElementById('topologyHintsBtn').textContent = topologyHintsVisible ? tr('hideHints') : tr('showHints');
 }
 
-function sameSnakeCell(a, gx, gy, side, face) {
-  return a.gx === gx && a.gy === gy && sameSurfaceSide(a.side, side) && sameSurfaceFace(a.face, face);
-}
 
 function togglePause() {
-  if (!running) return;
-  paused = !paused;
+  if (!continuousGame.state().running) return;
+  clearSteering();
+  continuousGame.togglePause();
   updateUI();
 }
 
@@ -3040,172 +2732,7 @@ function addMsg(text, cls, duration = 1600) {
 /* ===========================
    GAME LOGIC
    =========================== */
-function pickFoodType() {
-  const total = Object.values(FOOD_DEF).reduce((s, t) => s + t.weight, 0);
-  let r = Math.random() * total;
-  for (const [key, val] of Object.entries(FOOD_DEF)) {
-    r -= val.weight;
-    if (r <= 0) return key;
-  }
-  return 'grow';
-}
 
-function sameSurfaceSide(a, b) {
-  return (a ?? 1) === (b ?? 1);
-}
-
-function sameSurfaceFace(a, b) {
-  return (a ?? null) === (b ?? null);
-}
-
-function isOccupied(gx, gy, side = 1, face = null) {
-  if (snake.some(s => sameSnakeCell(s, gx, gy, side, face))) return true;
-  if (foods.some(f => f.gx === gx && f.gy === gy && sameSurfaceSide(f.side, side) && sameSurfaceFace(f.face, face))) return true;
-  return false;
-}
-
-function trySpawnFood() {
-  if (foods.length >= MAX_FOODS) return;
-  const type = pickFoodType();
-  for (let attempt = 0; attempt < 80; attempt++) {
-    const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
-    const gx = Math.floor(Math.random() * gridSize);
-    const gy = Math.floor(Math.random() * gridSize);
-    const side = ['mobius', 'klein'].includes(MAP_TYPE) && Math.random() < 0.5 ? -1 : 1;
-    const face = MAP_TYPE === 'sphere'
-      ? CUBE_FACE_KEYS[Math.floor(Math.random() * CUBE_FACE_KEYS.length)]
-      : (MAP_TYPE === 'genus2' ? randomGenus2FaceKey() : null);
-    if (!isOccupied(gx, gy, side, face)) {
-      foods.push({ gx, gy, side, face, type, age: 0 });
-      return;
-    }
-  }
-}
-
-function applyEffect(type) {
-  switch (type) {
-    case 'grow':
-      score++;
-      if (score > best) {
-        best = score;
-        localStorage.setItem(`snake3dBest_${MAP_TYPE}`, best);
-      }
-      addMsg(tr('grew'), 'good');
-      break;
-    case 'slow':
-      speed = Math.min(speed + 30, 250);
-      restartLoop();
-      addMsg(tr('slowed'), 'good');
-      break;
-    case 'shrink':
-      if (snake.length > 2) { snake.pop(); snake.pop(); }
-      else if (snake.length > 1) { snake.pop(); }
-      addMsg(tr('shortened'), 'warn');
-      break;
-    case 'speedUp':
-      speed = Math.max(speed - 30, 40);
-      restartLoop();
-      addMsg(tr('spedUp'), 'warn');
-      break;
-  }
-}
-
-function die(reason = tr('gameOver')) {
-  running = false;
-  clearMsgTimer();
-  setMsg(reason || tr('gameOver'), 'dead');
-}
-
-function winByLoop(info) {
-  running = false;
-  const text = info.winText || tr('winNontrivial', { label: info.label });
-  clearMsgTimer();
-  setMsg(text, 'good');
-}
-
-function gameTick() {
-  if (!running || paused) return;
-
-  tickStartTime = performance.now();
-  tickInterval = speed;
-
-  // Age foods
-  foods = foods.filter(f => { f.age++; return f.age < FOOD_LIFETIME; });
-  for (let i = foods.length; i < MIN_FOODS; i++) trySpawnFood();
-
-  // Spawn timer
-  spawnTimer--;
-  if (spawnTimer <= 0) {
-    spawnTimer = SPAWN_INTERVAL;
-    trySpawnFood();
-  }
-
-  direction = { ...nextDir };
-
-  const head = snake[0];
-  const moveDir = { ...direction };
-  const next = normalizeGridPosition(head.gx + direction.dx, head.gy + direction.dy, direction, head.side, head.face);
-  if (next.blocked) {
-    die(tr('hitBoundary'));
-    return;
-  }
-  const newGx = next.gx;
-  const newGy = next.gy;
-  const newSide = next.side ?? 1;
-  const newFace = next.face ?? null;
-  direction = next.dir;
-  nextDir = { ...direction };
-  chartMirror *= next.mirror ?? 1;
-  const newHead = {
-    gx: newGx,
-    gy: newGy,
-    side: newSide,
-    face: newFace,
-    topo: advanceTopologyState(head.topo, head, moveDir),
-  };
-  if (LOOP_WIN_MAPS.has(MAP_TYPE)) {
-    pi1LastStep = describeTopologyMove(head, moveDir);
-  }
-
-  const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
-  if (hitSelfIdx !== -1) {
-    const closure = selfClosureInfo(newHead.topo, hitSelfIdx);
-    snake = [newHead, ...snake.slice(0, hitSelfIdx)];
-    if (closure?.nontrivial) {
-      winByLoop(closure);
-      updateUI();
-      return;
-    }
-
-    if (closure) {
-      addMsg(closure.failLabel || tr('failTrivial'), 'warn');
-    } else {
-      addMsg(tr('bodyCut', { n: snake.length }), 'warn');
-    }
-    updateUI();
-    return;
-  }
-
-  snake.unshift(newHead);
-
-  // Food collision
-  const eatenIdx = foods.findIndex(f => f.gx === newGx && f.gy === newGy && sameSurfaceSide(f.side, newSide) && sameSurfaceFace(f.face, newFace));
-  if (eatenIdx !== -1) {
-    const eaten = foods[eatenIdx];
-    foods.splice(eatenIdx, 1);
-    applyEffect(eaten.type);
-    trySpawnFood();
-  } else {
-    snake.pop();
-  }
-
-  updateUI();
-}
-
-function restartLoop() {
-  clearInterval(loop);
-  loop = setInterval(gameTick, speed);
-}
 
 /* ===========================
    CAMERA
@@ -3218,80 +2745,45 @@ function resetCamera() {
   surfaceGroup.rotation.set(0, 0, 0);
 }
 
-function directionAngle(dir) {
-  if (dir.dx === 1) return 0;
-  if (dir.dy === 1) return 1;
-  if (dir.dx === -1) return 2;
-  return 3;
-}
-
-function rotateGridVector(vec, turns) {
-  const n = ((turns % 4) + 4) % 4;
-  if (n === 1) return { dx: -vec.dy, dy: vec.dx };
-  if (n === 2) return { dx: -vec.dx, dy: -vec.dy };
-  if (n === 3) return { dx: vec.dy, dy: -vec.dx };
-  return { dx: vec.dx, dy: vec.dy };
-}
-
-function reflectAcrossDirectionAxis(vec, axisDir) {
-  if (axisDir.dx !== 0) return { dx: vec.dx, dy: -vec.dy };
-  return { dx: -vec.dx, dy: vec.dy };
-}
-
-function surfaceToChartVector(vec) {
-  const baseDir = nextDir || direction;
-  const oriented = chartMirror === -1 ? reflectAcrossDirectionAxis(vec, baseDir) : vec;
-  const turns = directionAngle(chartDisplayDir) - directionAngle(baseDir);
-  return rotateGridVector(oriented, turns);
-}
-
-function chartToSurfaceDirection(dir) {
-  const baseDir = nextDir || direction;
-  const turns = directionAngle(baseDir) - directionAngle(chartDisplayDir);
-  const rotated = rotateGridVector(dir, turns);
-  return chartMirror === -1 ? reflectAcrossDirectionAxis(rotated, baseDir) : rotated;
-}
-
-function queueChartDirection(displayDir) {
-  const surfaceDir = chartToSurfaceDirection(displayDir);
-  const activeDir = nextDir || direction;
-  if (surfaceDir.dx === -activeDir.dx && surfaceDir.dy === -activeDir.dy) return;
-  nextDir = surfaceDir;
-  chartDisplayDir = { ...displayDir };
-}
 
 /* ===========================
    INPUT
    =========================== */
+const steeringKeys = new Set();
+const steeringPointers = new Map();
+
+function updateSteering() {
+  const left = steeringKeys.has('arrowleft') || steeringKeys.has('a') || [...steeringPointers.values()].includes(-1);
+  const right = steeringKeys.has('arrowright') || steeringKeys.has('d') || [...steeringPointers.values()].includes(1);
+  continuousGame.setTurn(Number(right) - Number(left));
+}
+function clearSteering() {
+  steeringKeys.clear(); steeringPointers.clear(); updateSteering();
+}
 document.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
-
-  if (key === ' ' || key === 'spacebar' || key === 'p') {
-    e.preventDefault();
-    togglePause();
-    return;
+  if (['arrowleft', 'arrowright', 'a', 'd'].includes(key)) {
+    e.preventDefault(); steeringKeys.add(key); updateSteering(); return;
   }
-
-  if (key === 'r') {
-    resetCamera();
-    return;
-  }
-
-  if (!running || paused) return;
-
-  switch (key) {
-    case 'arrowup':    case 'w': queueChartDirection({ dx:  0, dy: -1 }); break;
-    case 'arrowdown':  case 's': queueChartDirection({ dx:  0, dy:  1 }); break;
-    case 'arrowleft':  case 'a': queueChartDirection({ dx: -1, dy:  0 }); break;
-    case 'arrowright': case 'd': queueChartDirection({ dx:  1, dy:  0 }); break;
-  }
+  if (e.repeat) return;
+  if (key === ' ' || key === 'p') { e.preventDefault(); togglePause(); }
+  if (key === 'r') resetCamera();
 });
-
-document.getElementById('restart').addEventListener('click', () => {
-  clearInterval(loop);
-  init();
-  loop = setInterval(gameTick, speed);
+document.addEventListener('keyup', e => {
+  if (steeringKeys.delete(e.key.toLowerCase())) { e.preventDefault(); updateSteering(); }
 });
+function pauseWhenInactive() {
+  clearSteering();
+  for (const pointerId of surfacePointers.keys()) {
+    if (renderer.domElement.hasPointerCapture(pointerId)) renderer.domElement.releasePointerCapture(pointerId);
+  }
+  surfacePointers.clear(); isSurfaceDragging = false; pinchStartDistance = 0;
+  if (continuousGame.state().running) continuousGame.setPaused(true);
+  updateUI();
+}
+window.addEventListener('blur', pauseWhenInactive);
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseWhenInactive(); });
+document.getElementById('restart').addEventListener('click', init);
 
 document.getElementById('pauseBtn').addEventListener('click', togglePause);
 document.getElementById('topologyHintsBtn').addEventListener('click', toggleTopologyHints);
@@ -3302,25 +2794,20 @@ document.getElementById('resetCam').addEventListener('click', resetCamera);
    =========================== */
 function init() {
   applyStaticText();
+  document.getElementById('surface-caption').textContent = LANG === 'zh' ? '流形' : 'Manifold';
   fieldScale = 1.0;
   ensureSurfaceGeometry();
-  score = 0;
-  speed = INITIAL_SPEED_MS;
-  running = true;
-  paused = false;
-  foods = [];
-  spawnTimer = SPAWN_INTERVAL;
-  clearMsgTimer();
-  best = parseInt(localStorage.getItem(`snake3dBest_${MAP_TYPE}`) || '0');
-
-  resetSnake();
-
-  for (let i = 0; i < INITIAL_FOODS; i++) trySpawnFood();
-
-  setMsg('');
-  updateUI();
-  resetCamera();
-  tickStartTime = performance.now();
+  textureHintState = null;
+  clearMsgTimer(); clearSteering(); pi1LastStep = null;
+  chartView.reset();
+  best = parseInt(localStorage.getItem('snake3dBest_' + MAP_TYPE) || '0');
+  const start = MAP_TYPE === 'sphere' ? navigation.seed(0.52, 0.52, 'F')
+    : MAP_TYPE === 'genus2' ? navigation.seed(0.5, 0.5, genus2StartFaceKey())
+    : MAP_TYPE === 'torus' ? navigation.seed(0.12, 0.23)
+    : MAP_TYPE === 'projective' ? navigation.seed(0.7, 0.6)
+    : navigation.seed(0.12, 0.5);
+  continuousGame.reset(start);
+  setMsg(''); updateUI(); resetCamera();
 }
 
 /* ===========================
@@ -3328,208 +2815,56 @@ function init() {
    =========================== */
 const mapCanvas = document.getElementById('mapCanvas');
 const touchControlZone = document.getElementById('touch-control-zone');
-const MAP_CTX = mapCanvas.getContext('2d');
-const MAP_CELLS = 9;
-const MAP_PX = mapCanvas.width / MAP_CELLS;
-const MAP_HALF = Math.floor(MAP_CELLS / 2);
-const MAP_SWIPE_THRESHOLD = 24;
-let mapTouchStart = null;
-
-function claimMapPointerEvent(e) {
-  e.preventDefault();
-  e.stopPropagation();
+function setPointerSteering(e) {
+  const bounds = mapCanvas.getBoundingClientRect();
+  steeringPointers.set(e.pointerId, e.clientX < bounds.left + bounds.width / 2 ? -1 : 1);
+  updateSteering();
 }
-
-function handleMapSwipe(dx, dy) {
-  if (!running || paused) return false;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < MAP_SWIPE_THRESHOLD) return false;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    queueChartDirection({ dx: dx < 0 ? -1 : 1, dy: 0 });
-  } else {
-    queueChartDirection({ dx: 0, dy: dy < 0 ? -1 : 1 });
-  }
-  return true;
-}
-
-function startChartControlPointer(e) {
-  claimMapPointerEvent(e);
-  mapTouchStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
-  e.currentTarget.setPointerCapture(e.pointerId);
-}
-
-function moveChartControlPointer(e) {
-  if (!mapTouchStart || mapTouchStart.pointerId !== e.pointerId) return;
-  claimMapPointerEvent(e);
-  const dx = e.clientX - mapTouchStart.x;
-  const dy = e.clientY - mapTouchStart.y;
-  if (handleMapSwipe(dx, dy)) {
-    mapTouchStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
-  }
-}
-
-function endChartControlPointer(e) {
-  if (!mapTouchStart || mapTouchStart.pointerId !== e.pointerId) return;
-  claimMapPointerEvent(e);
-  handleMapSwipe(e.clientX - mapTouchStart.x, e.clientY - mapTouchStart.y);
-  mapTouchStart = null;
-  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  }
-}
-
 function bindChartControlSurface(el) {
-  el.addEventListener('pointerdown', startChartControlPointer, { passive: false });
-  el.addEventListener('pointermove', moveChartControlPointer, { passive: false });
-  el.addEventListener('pointerup', endChartControlPointer, { passive: false });
-  el.addEventListener('pointercancel', endChartControlPointer, { passive: false });
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    el.setPointerCapture(e.pointerId); setPointerSteering(e);
+  });
+  el.addEventListener('pointermove', e => {
+    if (!steeringPointers.has(e.pointerId)) return;
+    e.preventDefault(); e.stopPropagation(); setPointerSteering(e);
+  });
+  const release = e => {
+    steeringPointers.delete(e.pointerId); updateSteering();
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('lostpointercapture', release);
 }
-
 bindChartControlSurface(mapCanvas);
+bindChartControlSurface(document.getElementById('map-panel'));
 bindChartControlSurface(touchControlZone);
 
-function drawChartFruit(ctx, cx, cy, size, color) {
-  const radius = size * 0.32;
-  const gradient = ctx.createRadialGradient(cx - radius * 0.35, cy - radius * 0.4, radius * 0.05, cx, cy, radius);
-  gradient.addColorStop(0, '#fff0c6');
-  gradient.addColorStop(0.5, color);
-  gradient.addColorStop(1, color);
-  ctx.save();
-  ctx.shadowColor = 'rgba(49,78,59,0.24)';
-  ctx.shadowBlur = 3;
-  ctx.shadowOffsetY = 2;
-  ctx.fillStyle = gradient;
-  ctx.beginPath(); ctx.arc(cx, cy + 1, radius, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.fillStyle = '#4e9069';
-  ctx.beginPath(); ctx.ellipse(cx + radius * 0.38, cy - radius * 0.85, radius * 0.4, radius * 0.18, -0.45, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-}
-
-function drawChartSnake(ctx, cx, cy, size, isHead, alpha, dir) {
-  const width = size - 3;
-  const x = cx - width / 2, y = cy - width / 2;
-  const gradient = ctx.createLinearGradient(x, y, x, y + width);
-  gradient.addColorStop(0, isHead ? '#ffbd82' : '#f5b379');
-  gradient.addColorStop(1, isHead ? '#e98b55' : '#dc8c5b');
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = gradient;
-  ctx.shadowColor = 'rgba(83,93,55,0.22)';
-  ctx.shadowBlur = 2;
-  ctx.shadowOffsetY = 2;
-  ctx.beginPath(); ctx.roundRect(x, y, width, width, isHead ? 9 : 8); ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = 'rgba(255,243,206,0.65)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.roundRect(x + 1, y + 1, width - 2, width - 3, 7); ctx.stroke();
-  if (isHead) {
-    for (const sign of [-1, 1]) {
-      const ex = cx + dir.dx * size * 0.19 - dir.dy * sign * size * 0.20;
-      const ey = cy + dir.dy * size * 0.19 + dir.dx * sign * size * 0.20;
-      ctx.fillStyle = '#fff9e8';
-      ctx.beginPath(); ctx.arc(ex, ey, size * 0.145, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#304b49';
-      ctx.beginPath(); ctx.arc(ex + dir.dx * 1.2, ey + dir.dy * 1.2, size * 0.075, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-  ctx.restore();
-}
-
-function drawMiniMap() {
-  if (snake.length === 0) return;
-  const ctx = MAP_CTX;
-  const head = snake[0];
-  const dir = chartDisplayDir;
-
-  // Background
-  ctx.fillStyle = '#b8d3bf';
-  ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
-
-  // Grid
-  for (let y = 0; y < MAP_CELLS; y++) {
-    for (let x = 0; x < MAP_CELLS; x++) {
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#d8e7d2' : '#d1e2cc';
-      ctx.beginPath(); ctx.roundRect(x * MAP_PX + 1, y * MAP_PX + 1, MAP_PX - 2, MAP_PX - 2, 4); ctx.fill();
-    }
-  }
-
-  // Map world coordinates to chart pixel center.
-  function worldToChart(gx, gy, side = 1, face = null) {
-    let best = null;
-    for (let ry = -MAP_HALF; ry <= MAP_HALF; ry++) {
-      for (let rx = -MAP_HALF; rx <= MAP_HALF; rx++) {
-        const p = normalizeGridPosition(head.gx + rx, head.gy + ry, null, head.side, head.face);
-        if (
-          p.blocked ||
-          p.gx !== gx ||
-          p.gy !== gy ||
-          !sameSurfaceSide(p.side, side) ||
-          !sameSurfaceFace(p.face, face)
-        ) continue;
-        const dist = Math.abs(rx) + Math.abs(ry);
-        if (!best || dist < best.dist) best = { rx, ry, dist };
-      }
-    }
-    if (!best) return null;
-    const screenOffset = surfaceToChartVector({ dx: best.rx, dy: best.ry });
-    return {
-      cx: (screenOffset.dx + MAP_HALF) * MAP_PX + MAP_PX / 2,
-      cy: (screenOffset.dy + MAP_HALF) * MAP_PX + MAP_PX / 2,
-    };
-  }
-
-  // Food
-  for (const f of foods) {
-    const m = worldToChart(f.gx, f.gy, f.side, f.face);
-    if (!m) continue;
-    const def = FOOD_DEF[f.type];
-    drawChartFruit(ctx, m.cx, m.cy, MAP_PX, '#' + def.color.toString(16).padStart(6, '0'));
-  }
-
-  // Snake (tail first, head on top)
-  for (let i = snake.length - 1; i >= 0; i--) {
-    const s = snake[i];
-    const m = worldToChart(s.gx, s.gy, s.side, s.face);
-    if (!m) continue;
-    drawChartSnake(ctx, m.cx, m.cy, MAP_PX, i === 0, 0.7 + 0.3 * (1 - i / snake.length), dir);
-  }
-
-  // Center cell highlight
-  ctx.strokeStyle = 'rgba(74,129,98,0.65)';
-  ctx.lineWidth = 2;
-  const chx = MAP_HALF * MAP_PX, chy = MAP_HALF * MAP_PX;
-  ctx.beginPath(); ctx.roundRect(chx + 0.5, chy + 0.5, MAP_PX - 1, MAP_PX - 1, 7); ctx.stroke();
-
-  // Direction arrow on head
-  const acx = MAP_HALF * MAP_PX + MAP_PX / 2;
-  const acy = MAP_HALF * MAP_PX + MAP_PX / 2;
-  ctx.fillStyle = 'rgba(76,77,52,0.55)';
-  ctx.beginPath();
-  const alen = MAP_PX * 0.3;
-  const ax = acx + dir.dx * alen;
-  const ay = acy + dir.dy * alen;
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(ax - dir.dy * alen * 0.35, ay + dir.dx * alen * 0.35);
-  ctx.lineTo(ax + dir.dy * alen * 0.35, ay - dir.dx * alen * 0.35);
-  ctx.closePath();
-  ctx.fill();
-}
+const chartView = createChartView({ THREE, canvas: mapCanvas, parent: surfaceGroup, atlas, navigation,
+  colors: Object.fromEntries(Object.entries(FOOD_DEF).map(([key, value]) => [key, '#' + value.color.toString(16).padStart(6, '0')])) });
+function drawMiniMap() { chartView.update(continuousGame.state()); }
 
 /* ===========================
    RENDER LOOP
    =========================== */
-function render() {
+function render(now = performance.now()) {
   requestAnimationFrame(render);
-
+  const elapsed = lastRenderTime === null ? 0 : (now - lastRenderTime) / 1000;
+  lastRenderTime = now;
+  continuousGame.update(elapsed);
+  syncContinuousState();
   redrawTexture();
-  clayActors.update(performance.now());
+  clayActors.update(now);
   drawMiniMap();
   updatePi1Panel();
+  updateUI();
   renderer.render(scene, camera);
 }
 
+let lastRenderTime = null;
 init();
-loop = setInterval(gameTick, speed);
+if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, surfacePoint, THREE };
 render();
 </script>
 </body>

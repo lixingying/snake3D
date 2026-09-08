@@ -150,10 +150,10 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween }) {
       lastHead = state.snake[0];
       lastScale = state.scale;
       startedAt = clock;
-      duration = Math.min(110, state.speed * 0.7);
+      duration = state.continuous ? 0 : Math.min(110, state.speed * 0.7);
       ensureCapacity(state.snake.length);
     }
-    const progress = reducedMotion || !state.running ? 1 : Math.min(1, (clock - startedAt) / Math.max(duration, 1));
+    const progress = state.continuous || reducedMotion || !state.running ? 1 : Math.min(1, (clock - startedAt) / Math.max(duration, 1));
     const t = progress * progress * (3 - 2 * progress);
     head.visible = targets.length > 0;
     bodyMesh.count = bellyMesh.count = Math.max(0, targets.length - 1);
@@ -241,7 +241,7 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween }) {
         entry.secondLeaf.visible = food.type === 'speedUp';
       }
       const frame = entry.frame;
-      const phase = clock * 0.003 + food.gx * 2.5 + food.gy * 3.1;
+      const phase = clock * 0.003 + (food.u ?? food.gx ?? 0) * 2.5 + (food.v ?? food.gy ?? 0) * 3.1;
       const bob = reducedMotion ? 0 : 0.08 * Math.sin(phase);
       entry.root.position.copy(frame.position).addScaledVector(frame.normal, frame.radius * (0.20 + bob));
       entry.root.quaternion.copy(frame.rotation);

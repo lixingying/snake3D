@@ -8,12 +8,12 @@ The goal is usually to form an Ouroboros: the snake closes into a loop. Differen
 
 ## Features
 
-- Six playable surfaces: sphere, torus, genus 2, Mobius strip, projective plane, and Klein bottle.
-- 3D surface view plus a local chart view.
+- Six playable surfaces: sphere, torus, genus 2, Mobius strip, projective plane (Boy surface), and Klein bottle.
+- Side-by-side manifold and local chart views, with the chart boundary marked on the surface.
 - Surface-specific loop detection.
 - Optional topology hints showing cuts and the current group calculation.
 - English and Chinese UI.
-- Desktop keyboard controls and mobile swipe controls.
+- Continuous movement with hold-to-steer keyboard and touch controls.
 - Mobile 3D gestures: one-finger rotate, two-finger pinch zoom.
 
 ## Play
@@ -24,7 +24,7 @@ Open `index.html` in a browser and choose a surface.
 
 Desktop:
 
-- Arrow keys or WASD: move the snake
+- Hold Left/Right or A/D: turn the snake; release to continue forward
 - P or Space: pause
 - Drag the 3D view: rotate the surface
 - Mouse wheel: zoom
@@ -32,7 +32,7 @@ Desktop:
 
 Mobile:
 
-- Swipe on the chart area, or the horizontal touch band at the chart height: move the snake
+- Hold the left/right half of the chart or touch band: turn left/right
 - Drag the 3D view with one finger: rotate the surface
 - Pinch the 3D view with two fingers: zoom
 
@@ -47,12 +47,12 @@ Mobile:
 
 ## Customization
 
-Useful constants are near the top of `snake3d.html`.
+Visual settings are in `snake3d.html`, `clay-actors.js`, `chart-view.js`, and `style.css`; movement settings are in `continuous-snake.js`, with local coordinates in `surface-atlas.js`.
 
 - Initial speed: `INITIAL_SPEED_MS`. Smaller values are faster.
 - Genus-2 default camera: `GENUS2_CAMERA_POSITION`.
 - Mobile camera zoom: `MOBILE_CAMERA_DISTANCE_SCALE`. Smaller values zoom in more on mobile.
-- Food counts: `INITIAL_FOODS`, `MIN_FOODS`, `MAX_FOODS`.
+- Snake length, radius, and turning speed: `initialLength`, `radius`, `turnRate`.
 - Food weights and colors: `FOOD_DEF`.
 
 The index page previews can either use the built-in rotating 3D previews or custom images. To use a custom image, set `data-image` on a `.map-card` in `index.html`.
@@ -87,12 +87,12 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 
 ## 功能
 
-- 六张曲面地图：球面、环面、双孔曲面、莫比乌斯带、射影平面、克莱因瓶。
-- 3D 曲面视图和局部地图视图。
+- 六张曲面地图：球面、环面、双孔曲面、莫比乌斯带、射影平面（Boy 曲面）、克莱因瓶。
+- 左侧流形、右侧局部 chart，曲面上的边线标出 chart 对应的范围。
 - 针对不同曲面的环路判定。
 - 可选拓扑提示：显示 cut 和当前群计算。
 - 英文和中文界面。
-- 支持桌面键盘控制和手机滑动控制。
+- 连续自由移动，支持键盘和触屏按住转向。
 - 手机端 3D 手势：单指旋转，双指捏合缩放。
 
 ## 运行
@@ -103,7 +103,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 
 桌面端：
 
-- 方向键或 WASD：控制蛇移动
+- 按住左/右方向键或 A/D：持续转向；松开后继续向前
 - P 或空格：暂停
 - 拖拽 3D 视图：旋转曲面
 - 鼠标滚轮：缩放
@@ -111,7 +111,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 
 手机端：
 
-- 在局部地图上滑动，或在局部地图同一高度的横向触控区域滑动：控制蛇移动
+- 按住局部地图或触控区域的左/右半边：向左/右转向
 - 在 3D 视图单指拖拽：旋转曲面
 - 在 3D 视图双指捏合：缩放
 
@@ -126,12 +126,12 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 
 ## 自定义参数
 
-常用参数在 `snake3d.html` 前部。
+画面设置在 `snake3d.html`、`clay-actors.js`、`chart-view.js` 和 `style.css` 中，运动参数在 `continuous-snake.js` 中，局部坐标在 `surface-atlas.js` 中。
 
 - 初始速度：`INITIAL_SPEED_MS`。数值越小，蛇越快。
 - 双孔曲面默认相机：`GENUS2_CAMERA_POSITION`。
 - 手机端相机距离：`MOBILE_CAMERA_DISTANCE_SCALE`。数值越小，手机端越放大。
-- 食物数量：`INITIAL_FOODS`、`MIN_FOODS`、`MAX_FOODS`。
+- 蛇的长度、粗细和转向速度：`initialLength`、`radius`、`turnRate`。
 - 食物权重和颜色：`FOOD_DEF`。
 
 首页预览可以使用内置的旋转 3D 预览，也可以换成自己的图片。要换图，在 `index.html` 的 `.map-card` 上填写 `data-image`。
