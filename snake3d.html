@@ -9,318 +9,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Snake on Surfaces</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    overflow: hidden;
-    background: #07090f;
-    font-family: 'Courier New', monospace;
-    color: #eee;
-    user-select: none;
-  }
-  #canvas-container {
-    position: fixed;
-    inset: 0;
-    z-index: 1;
-  }
-  #overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 12px 16px;
-  }
-  .top-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    align-self: center;
-  }
-  .top-bar {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    flex-wrap: wrap;
-    font-size: 0.95rem;
-    background: rgba(9, 12, 20, 0.86);
-    padding: 8px 16px;
-    border-radius: 6px;
-  }
-  .top-bar span { font-weight: bold; }
-  .goal-line {
-    max-width: min(760px, calc(100vw - 32px));
-    text-align: center;
-    font-size: 1.05rem;
-    line-height: 1.35;
-    background: rgba(9, 12, 20, 0.9);
-    border: 1px solid rgba(93,173,226,0.55);
-    border-radius: 6px;
-    padding: 7px 14px;
-    color: #dbefff;
-  }
-  .goal-line span { font-weight: bold; }
-  #goalText { color: #5dade2; }
-  .msg-area {
-    text-align: center;
-    font-size: 0.9rem;
-    height: 20px;
-    line-height: 20px;
-    pointer-events: none;
-  }
-  .msg-area.good { color: #4ecca3; }
-  .msg-area.warn { color: #f0a500; }
-  .msg-area.dead { color: #e84545; }
-  .bottom-bar {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-  .btn-row {
-    display: flex;
-    gap: 10px;
-    pointer-events: auto;
-  }
-  button {
-    padding: 6px 18px;
-    font-size: 0.9rem;
-    font-family: inherit;
-    background: #4ecca3;
-    color: #1a1a2e;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    letter-spacing: 1px;
-  }
-  button:hover { background: #3db88f; }
-  button.btn2 { background: #5dade2; }
-  button.btn2:hover { background: #4a9ccf; }
-  .legend {
-    display: flex;
-    gap: 10px;
-    font-size: 0.72rem;
-    color: #aaa;
-    flex-wrap: wrap;
-    justify-content: center;
-    line-height: 1.5;
-    background: rgba(9, 12, 20, 0.78);
-    padding: 6px 12px;
-    border-radius: 4px;
-  }
-  .legend .dot {
-    display: inline-block;
-    width: 10px; height: 10px;
-    border-radius: 2px;
-    margin-right: 2px;
-    vertical-align: middle;
-  }
-  .legend .sepa { color: #444; margin: 0 2px; font-weight: bold; }
-  .tip {
-    font-size: 0.75rem;
-    color: #7f8da3;
-    text-align: center;
-  }
-  .pause-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 3;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    color: #fff;
-    pointer-events: none;
-  }
-  #map-panel {
-    position: fixed;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 3;
-    background: rgba(9, 12, 20, 0.94);
-    border: 2px solid #4ecca3;
-    border-radius: 8px;
-    padding: 5px;
-    pointer-events: auto;
-    touch-action: none;
-    user-select: none;
-  }
-  #mapCanvas { touch-action: none; display: block; }
-  #touch-control-zone {
-    display: none;
-    position: fixed;
-    left: 0;
-    right: 0;
-    z-index: 3;
-    pointer-events: none;
-    touch-action: none;
-  }
-  #map-panel .map-title {
-    text-align: center;
-    font-size: 0.68rem;
-    color: #4ecca3;
-    letter-spacing: 1px;
-    margin-top: 1px;
-  }
-  #pi1-panel {
-    position: fixed;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 3;
-    width: 310px;
-    background: rgba(9, 12, 20, 0.94);
-    border: 2px solid #5dade2;
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 0.68rem;
-    line-height: 1.45;
-    color: #d7e8f4;
-    pointer-events: none;
-  }
-  #pi1-panel .pi1-title {
-    color: #5dade2;
-    text-align: center;
-    letter-spacing: 1px;
-    margin-bottom: 4px;
-  }
-  #pi1-panel .pi1-row {
-    display: grid;
-    grid-template-columns: 72px 1fr;
-    gap: 6px;
-    align-items: start;
-  }
-  #pi1-panel .pi1-key { color: #7f8da3; }
-  #pi1-panel .pi1-val {
-    color: #f5fbff;
-    overflow-wrap: anywhere;
-  }
-  #pi1-panel .pi1-warn { color: #f0a500; }
-  @media (max-width: 700px), (pointer: coarse) and (max-width: 980px) {
-    #canvas-container {
-      top: 64px;
-      right: 0;
-      bottom: 348px;
-      left: 0;
-    }
-    #overlay {
-      padding: calc(8px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom));
-    }
-    .top-bar {
-      gap: 12px;
-      font-size: 0.82rem;
-      padding: 6px 12px;
-    }
-    .goal-line {
-      max-width: calc(100vw - 20px);
-      font-size: 0.78rem;
-      padding: 6px 10px;
-    }
-    .bottom-bar {
-      gap: 6px;
-    }
-    .btn-row {
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 7px;
-    }
-    button {
-      padding: 6px 12px;
-      font-size: 0.78rem;
-      letter-spacing: 0;
-    }
-    .legend {
-      max-width: calc(100vw - 20px);
-      gap: 8px;
-      font-size: 0.64rem;
-      padding: 5px 9px;
-    }
-    .tip {
-      display: none;
-    }
-    #map-panel {
-      left: 50%;
-      right: auto;
-      top: auto;
-      bottom: calc(84px + env(safe-area-inset-bottom));
-      transform: translateX(-50%);
-      padding: 4px;
-      z-index: 4;
-    }
-    #mapCanvas {
-      width: min(60vw, 232px);
-      height: min(60vw, 232px);
-    }
-    #touch-control-zone {
-      display: block;
-      pointer-events: auto;
-      bottom: calc(84px + env(safe-area-inset-bottom));
-      height: calc(min(60vw, 232px) + 26px);
-    }
-    #map-panel .map-title {
-      font-size: 0.62rem;
-    }
-    #pi1-panel {
-      left: 50%;
-      top: calc(82px + env(safe-area-inset-top));
-      transform: translateX(-50%);
-      width: min(330px, calc(100vw - 24px));
-      max-height: 35vh;
-      overflow: auto;
-      font-size: 0.62rem;
-    }
-  }
-  @media (max-width: 380px), (max-height: 720px) and (pointer: coarse) {
-    #canvas-container {
-      top: 62px;
-      bottom: 298px;
-    }
-    #map-panel {
-      bottom: calc(76px + env(safe-area-inset-bottom));
-    }
-    #mapCanvas {
-      width: min(52vw, 190px);
-      height: min(52vw, 190px);
-    }
-    #touch-control-zone {
-      bottom: calc(76px + env(safe-area-inset-bottom));
-      height: calc(min(52vw, 190px) + 26px);
-    }
-    .legend {
-      font-size: 0.58rem;
-    }
-    button {
-      padding: 5px 10px;
-      font-size: 0.72rem;
-    }
-  }
-  @media (pointer: coarse) and (max-width: 980px) and (max-height: 520px) {
-    #canvas-container {
-      top: 58px;
-      bottom: 220px;
-    }
-    #map-panel {
-      bottom: calc(54px + env(safe-area-inset-bottom));
-    }
-    #mapCanvas {
-      width: min(38vh, 154px);
-      height: min(38vh, 154px);
-    }
-    #touch-control-zone {
-      bottom: calc(54px + env(safe-area-inset-bottom));
-      height: calc(min(38vh, 154px) + 26px);
-    }
-    .legend {
-      display: none;
-    }
-  }
-</style>
+<link rel="stylesheet" href="style.css">
 <script type="importmap">
 {
   "imports": {
@@ -330,7 +19,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 }
 </script>
 </head>
-<body>
+<body data-page="game">
 
 <div id="canvas-container"></div>
 
@@ -352,10 +41,10 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
     </div>
     <div class="legend">
       <span id="foodLabel" style="color:#5e5">Food:</span>
-      <span><span class="dot" style="background:#f39c12"></span><span id="growLabel">Grow</span></span>
-      <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
-      <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
-      <span><span class="dot" style="background:#2ecc71"></span><span id="speedUpLabel">Speed Up</span></span>
+      <span><span class="dot" style="background:#efb74f"></span><span id="growLabel">Grow</span></span>
+      <span><span class="dot" style="background:#70b7df"></span><span id="slowLabel">Slow</span></span>
+      <span><span class="dot" style="background:#d96b72"></span><span id="shrinkLabel">Shrink</span></span>
+      <span><span class="dot" style="background:#86bb60"></span><span id="speedUpLabel">Speed Up</span></span>
     </div>
     <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -382,6 +71,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
   <div class="pi1-row"><span class="pi1-key" id="pi1CloseLabel">Closure</span><span class="pi1-val" id="pi1Close">-</span></div>
 </div>
 
+<script src="clay-actors.js"></script>
 <script type="module">
 import * as THREE from 'three';
 
@@ -423,10 +113,15 @@ const MAX_FOODS = 9;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
 const FOOD_DEF = {
-  grow:    { color: 0xf39c12, weight: 52 },
-  slow:    { color: 0x3498db, weight: 12 },
-  shrink:  { color: 0xc0392b, weight: 24 },
-  speedUp: { color: 0x2ecc71, weight: 12 },
+  grow:    { color: 0xefb74f, weight: 52 },
+  slow:    { color: 0x70b7df, weight: 12 },
+  shrink:  { color: 0xd96b72, weight: 24 },
+  speedUp: { color: 0x86bb60, weight: 12 },
+};
+
+const SURFACE_PALETTE = {
+  sphere: '#89c7bc', torus: '#77bca9', genus2: '#a79dcd',
+  mobius: '#e4bb85', projective: '#bda5ca', klein: '#86b9cd',
 };
 
 const TEXT = {
@@ -630,8 +325,8 @@ function ensureSurfaceGeometry() {
   if (!torusMaterial) {
     torusMaterial = new THREE.MeshStandardMaterial({
       map: gridTex,
-      roughness: 0.55,
-      metalness: 0.1,
+      roughness: 0.74,
+      metalness: 0,
       side: ['sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
     });
   }
@@ -674,10 +369,12 @@ function ensureSurfaceGeometry() {
   } else if (MAP_TYPE === 'klein') {
     geo = createKleinGeometry();
   } else {
-    geo = new THREE.TorusGeometry(R, r, 64, 32);
+    geo = new THREE.TorusGeometry(R, r, 48, 128);
   }
   torusMesh = new THREE.Mesh(geo, torusMaterial);
   torusMesh.position.set(0, 0, 0);
+  torusMesh.castShadow = true;
+  torusMesh.receiveShadow = true;
   surfaceGroup.add(torusMesh);
 
   if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') {
@@ -829,7 +526,7 @@ const GENUS2_RING_R = 0.58;
 const GENUS2_TUBE_R = 0.27;
 const GENUS2_SMOOTH = 0.18;
 const GENUS2_PATCH_CELLS = 6;
-const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS;
+const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS * 2;
 const GENUS2_POLYCUBE_SCALE = { x: 0.58, y: 0.55, z: 0.54 };
 const GENUS2_BASE_FACE = 'G2_0_0_0_PZ';
 
@@ -1417,7 +1114,12 @@ function createGenus2Geometry() {
     geo.addGroup(groupStart, verticesPerFace, i);
     groupStart += verticesPerFace;
   }
-  geo.computeVertexNormals();
+  const normals = [];
+  for (let i = 0; i < positions.length; i += 3) {
+    const normal = estimateGenus2Normal(positions[i], positions[i + 1], positions[i + 2]);
+    normals.push(normal.x, normal.y, normal.z);
+  }
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geo.computeBoundingSphere();
   return geo;
 }
@@ -1535,34 +1237,64 @@ function createKleinGeometry() {
    =========================== */
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07090f);
-scene.fog = new THREE.Fog(0x07090f, 5.5, 13);
+scene.fog = new THREE.Fog(0xe6eee5, 9, 18);
 const surfaceGroup = new THREE.Group();
 scene.add(surfaceGroup);
 
 const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
-camera.position.set(3.5, 2.8, 5.5);
+camera.position.set(2.94, 2.352, 4.62);
 camera.lookAt(0, 0, 0);
-const DEFAULT_CAMERA_POSITION = new THREE.Vector3(3.5, 2.8, 5.5);
+const DEFAULT_CAMERA_POSITION = new THREE.Vector3(2.94, 2.352, 4.62);
 const GENUS2_CAMERA_POSITION = new THREE.Vector3(2.75, 2.2, 4.32);
 const MOBILE_CAMERA_DISTANCE_SCALE = 0.84;
 const MOBILE_VIEW_QUERY = window.matchMedia('(max-width: 700px), (pointer: coarse) and (max-width: 980px)');
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;
 container.appendChild(renderer.domElement);
 
 // Lights
-const ambient = new THREE.AmbientLight(0x8aa2c8, 1.15);
+const ambient = new THREE.HemisphereLight(0xfff9df, 0x9ebeb2, 1.65);
 scene.add(ambient);
-const key = new THREE.DirectionalLight(0xffffff, 2.5);
-key.position.set(5, 8, 5);
+const key = new THREE.DirectionalLight(0xffefd6, 2.5);
+key.position.set(-3, 7, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = key.shadow.camera.bottom = -3.8;
+key.shadow.camera.right = key.shadow.camera.top = 3.8;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 18;
+key.shadow.normalBias = 0.025;
+key.shadow.bias = -0.0001;
+key.shadow.radius = 3;
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x7ee0c2, 1.45);
-rim.position.set(-3, -1, -3);
+const rim = new THREE.DirectionalLight(0xd8edf4, 1.7);
+rim.position.set(4, 2, -5);
 scene.add(rim);
+
+// A soft studio shadow grounds the floating surface without adding obstacles.
+const shadowCanvas = document.createElement('canvas');
+shadowCanvas.width = shadowCanvas.height = 128;
+const shadowContext = shadowCanvas.getContext('2d');
+const shadowGradient = shadowContext.createRadialGradient(64, 64, 5, 64, 64, 64);
+shadowGradient.addColorStop(0, 'rgba(48,75,65,0.20)');
+shadowGradient.addColorStop(0.5, 'rgba(48,75,65,0.10)');
+shadowGradient.addColorStop(1, 'rgba(48,75,65,0)');
+shadowContext.fillStyle = shadowGradient;
+shadowContext.fillRect(0, 0, 128, 128);
+const studioShadow = new THREE.Mesh(
+  new THREE.PlaneGeometry(5, 4),
+  new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowCanvas), transparent: true, depthWrite: false }),
+);
+studioShadow.rotation.x = -Math.PI / 2;
+studioShadow.position.y = -1.9;
+scene.add(studioShadow);
 
 const VIEW_MIN_DISTANCE = 2.5;
 const VIEW_MAX_DISTANCE = 8;
@@ -1767,55 +1499,9 @@ function cellCenter(gx, gy, face = 'F') {
   };
 }
 
-function drawFoodMark(ctx, f) {
-  const { x: cx, y: cy } = cellCenter(f.gx, f.gy, f.face);
-  const px = textureCellPx();
-  const def = FOOD_DEF[f.type];
-  const ageLeft = 1 - f.age / FOOD_LIFETIME;
-  const time = performance.now() / 1000;
-  const pulse = 0.82 + 0.18 * Math.sin(time * 4 + f.gx * 2.5 + f.gy * 3.1);
-  const pad = Math.max(1.5, px * 0.10);
-  ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
-  ctx.globalAlpha = (0.65 + 0.35 * ageLeft) * pulse;
-  ctx.fillRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
-  ctx.globalAlpha = 0.36;
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = Math.max(1, px * 0.05);
-  ctx.strokeRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
-  ctx.globalAlpha = 1;
-}
-
-function drawSnakeMark(ctx, s, i) {
-  const center = cellCenter(s.gx, s.gy, s.face);
-  const px = textureCellPx();
-  const sx = center.x - px / 2;
-  const sy = center.y - px / 2;
-  const pad = 1;
-  if (i === 0) {
-    ctx.fillStyle = '#ffdd57';
-    ctx.fillRect(sx + pad, sy + pad, px - pad * 2, px - pad * 2);
-    const dir = direction;
-    const cx = center.x;
-    const cy = center.y;
-    const er = px * 0.10;
-    ctx.fillStyle = '#061018';
-    let ex1, ey1, ex2, ey2;
-    if (dir.dx === 1)      { ex1 = cx + px*0.18; ey1 = cy - px*0.18; ex2 = cx + px*0.18; ey2 = cy + px*0.18; }
-    else if (dir.dx === -1) { ex1 = cx - px*0.18; ey1 = cy - px*0.18; ex2 = cx - px*0.18; ey2 = cy + px*0.18; }
-    else if (dir.dy === -1) { ex1 = cx - px*0.18; ey1 = cy - px*0.18; ex2 = cx + px*0.18; ey2 = cy - px*0.18; }
-    else                   { ex1 = cx - px*0.18; ey1 = cy + px*0.18; ex2 = cx + px*0.18; ey2 = cy + px*0.18; }
-    ctx.beginPath(); ctx.arc(ex1, ey1, er, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(ex2, ey2, er, 0, Math.PI*2); ctx.fill();
-  } else {
-    const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
-    ctx.fillStyle = `rgba(255,140,66,${alpha.toFixed(2)})`;
-    ctx.fillRect(sx + pad, sy + pad, px - pad * 2, px - pad * 2);
-  }
-}
-
 function drawSurfaceGrid(ctx, size) {
   if (MAP_TYPE === 'projective') {
-    ctx.strokeStyle = 'rgba(168,228,210,0.11)';
+    ctx.strokeStyle = 'rgba(255,253,235,0.20)';
     ctx.lineWidth = 1;
     const px = size / GRID_SIZE;
     for (let i = 1; i < GRID_SIZE; i++) {
@@ -1825,7 +1511,7 @@ function drawSurfaceGrid(ctx, size) {
     }
     return;
   }
-  ctx.strokeStyle = 'rgba(168,228,210,0.26)';
+  ctx.strokeStyle = 'rgba(255,253,235,0.28)';
   ctx.lineWidth = 1;
   const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
   const px = size / gridSize;
@@ -1956,12 +1642,16 @@ function drawTopologyCutMarks() {
   drawKleinCutMarks(markCtxBack);
 }
 
+let textureHintState = null;
 function redrawTexture() {
+  // Grid and cut textures are static between hint toggles. Actors are meshes.
+  if (textureHintState === topologyHintsVisible) return;
+  textureHintState = topologyHintsVisible;
   const ctx = texCtx;
   const size = TEX_SIZE;
 
   // Background
-  ctx.fillStyle = '#5f7f92';
+  ctx.fillStyle = SURFACE_PALETTE[MAP_TYPE];
   ctx.fillRect(0, 0, size, size);
 
   drawSurfaceGrid(ctx, size);
@@ -1978,14 +1668,6 @@ function redrawTexture() {
 
   drawTopologyCutMarks();
 
-  for (const f of foods) {
-    drawFoodMark(markContextFor(f), f);
-  }
-
-  for (let i = snake.length - 1; i >= 0; i--) {
-    drawSnakeMark(markContextFor(snake[i]), snake[i], i);
-  }
-
   gridTex.needsUpdate = true;
   markTexFront.needsUpdate = true;
   markTexBack.needsUpdate = true;
@@ -2001,6 +1683,61 @@ function redrawTexture() {
 /* ===========================
    COORDINATE SYSTEM
    =========================== */
+// These coordinates follow the rendered UVs, including the torus mesh's XY
+// orientation. They are deliberately separate from movement/cut calculations.
+function visualCellPoint(gx, gy, face = null) {
+  const n = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+  const u = (gx + 0.5) / n, v = (gy + 0.5) / n;
+  if (MAP_TYPE === 'sphere') return cubeSpherePoint(face || 'F', u, v);
+  if (MAP_TYPE === 'genus2') return genus2SurfacePoint(face || genus2StartFaceKey(), u, v);
+  if (MAP_TYPE === 'projective') return projectivePointUV(u, v);
+  if (MAP_TYPE === 'mobius') return mobiusPointUV(u, v);
+  if (MAP_TYPE === 'klein') return kleinPointUV(u, v);
+  const theta = u * Math.PI * 2, phi = v * Math.PI * 2;
+  const radial = getR() + getr() * Math.cos(phi);
+  return new THREE.Vector3(radial * Math.cos(theta), radial * Math.sin(theta), getr() * Math.sin(phi));
+}
+
+function visualCellFrame(item, heading = null, toward = null) {
+  const { gx, gy, face } = item;
+  const position = visualCellPoint(gx, gy, face);
+  const h = 0.02;
+  const du = visualCellPoint(gx + h, gy, face).sub(visualCellPoint(gx - h, gy, face)).multiplyScalar(1 / (2 * h));
+  const dv = visualCellPoint(gx, gy + h, face).sub(visualCellPoint(gx, gy - h, face)).multiplyScalar(1 / (2 * h));
+  let normal;
+  if (MAP_TYPE === 'sphere') normal = position.clone().normalize();
+  else if (MAP_TYPE === 'genus2') normal = estimateGenus2Normal(position.x, position.y, position.z);
+  else normal = new THREE.Vector3().crossVectors(du, dv).normalize();
+  // Preserve the existing RP² chart/state model; its display normal at the
+  // starting patch faces inward, so its sculpted pieces use the reverse normal.
+  normal.multiplyScalar((item.side ?? 1) * (MAP_TYPE === 'projective' ? -1 : 1));
+  const dir = heading || (toward && inferStepDirection(item, toward)) || { dx: 1, dy: 0 };
+  const forward = du.clone().multiplyScalar(dir.dx).addScaledVector(dv, dir.dy).normalize();
+  const radius = THREE.MathUtils.clamp(Math.min(du.length(), dv.length()) * 0.49, 0.025 * fieldScale, 0.12 * fieldScale);
+  const stepLength = dir.dx ? du.length() : dv.length();
+  return { position, normal, forward, radius,
+    length: THREE.MathUtils.clamp(stepLength * 0.54, radius, radius * 3.2),
+    reach: Math.max(du.length(), dv.length()) * 1.8,
+  };
+}
+
+function visualFrameBetween(from, to, t) {
+  const dir = inferStepDirection(from, to);
+  if (!dir) return null;
+  // Sample each half on its own chart, so cube/patch seams never create a
+  // straight shortcut through the surface. The discrete move is read only.
+  if (t <= 0.5) {
+    return visualCellFrame({ ...from, gx: from.gx + dir.dx * t, gy: from.gy + dir.dy * t }, dir);
+  }
+  const next = normalizeGridPosition(from.gx + dir.dx, from.gy + dir.dy, dir, from.side, from.face);
+  return visualCellFrame({ ...to, gx: to.gx - next.dir.dx * (1 - t), gy: to.gy - next.dir.dy * (1 - t) }, next.dir);
+}
+
+const clayActors = createClayActors({
+  THREE, parent: surfaceGroup, frameAt: visualCellFrame, frameBetween: visualFrameBetween,
+  getState: () => ({ snake, foods, direction, running, paused, score, speed, scale: fieldScale, foodLifetime: FOOD_LIFETIME }),
+});
+
 function to3D(gx, gy, face = 'F') {
   if (MAP_TYPE === 'genus2') {
     const p = genus2Point(gx, gy, face || genus2StartFaceKey());
@@ -3650,6 +3387,54 @@ function bindChartControlSurface(el) {
 bindChartControlSurface(mapCanvas);
 bindChartControlSurface(touchControlZone);
 
+function drawChartFruit(ctx, cx, cy, size, color) {
+  const radius = size * 0.32;
+  const gradient = ctx.createRadialGradient(cx - radius * 0.35, cy - radius * 0.4, radius * 0.05, cx, cy, radius);
+  gradient.addColorStop(0, '#fff0c6');
+  gradient.addColorStop(0.5, color);
+  gradient.addColorStop(1, color);
+  ctx.save();
+  ctx.shadowColor = 'rgba(49,78,59,0.24)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = gradient;
+  ctx.beginPath(); ctx.arc(cx, cy + 1, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#4e9069';
+  ctx.beginPath(); ctx.ellipse(cx + radius * 0.38, cy - radius * 0.85, radius * 0.4, radius * 0.18, -0.45, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawChartSnake(ctx, cx, cy, size, isHead, alpha, dir) {
+  const width = size - 3;
+  const x = cx - width / 2, y = cy - width / 2;
+  const gradient = ctx.createLinearGradient(x, y, x, y + width);
+  gradient.addColorStop(0, isHead ? '#ffbd82' : '#f5b379');
+  gradient.addColorStop(1, isHead ? '#e98b55' : '#dc8c5b');
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = gradient;
+  ctx.shadowColor = 'rgba(83,93,55,0.22)';
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetY = 2;
+  ctx.beginPath(); ctx.roundRect(x, y, width, width, isHead ? 9 : 8); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = 'rgba(255,243,206,0.65)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(x + 1, y + 1, width - 2, width - 3, 7); ctx.stroke();
+  if (isHead) {
+    for (const sign of [-1, 1]) {
+      const ex = cx + dir.dx * size * 0.19 - dir.dy * sign * size * 0.20;
+      const ey = cy + dir.dy * size * 0.19 + dir.dx * sign * size * 0.20;
+      ctx.fillStyle = '#fff9e8';
+      ctx.beginPath(); ctx.arc(ex, ey, size * 0.145, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#304b49';
+      ctx.beginPath(); ctx.arc(ex + dir.dx * 1.2, ey + dir.dy * 1.2, size * 0.075, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function drawMiniMap() {
   if (snake.length === 0) return;
   const ctx = MAP_CTX;
@@ -3657,16 +3442,15 @@ function drawMiniMap() {
   const dir = chartDisplayDir;
 
   // Background
-  ctx.fillStyle = '#223447';
+  ctx.fillStyle = '#b8d3bf';
   ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
 
   // Grid
-  ctx.strokeStyle = 'rgba(168,228,210,0.32)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= MAP_CELLS; i++) {
-    const p = i * MAP_PX;
-    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, mapCanvas.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(mapCanvas.width, p); ctx.stroke();
+  for (let y = 0; y < MAP_CELLS; y++) {
+    for (let x = 0; x < MAP_CELLS; x++) {
+      ctx.fillStyle = (x + y) % 2 === 0 ? '#d8e7d2' : '#d1e2cc';
+      ctx.beginPath(); ctx.roundRect(x * MAP_PX + 1, y * MAP_PX + 1, MAP_PX - 2, MAP_PX - 2, 4); ctx.fill();
+    }
   }
 
   // Map world coordinates to chart pixel center.
@@ -3699,12 +3483,7 @@ function drawMiniMap() {
     const m = worldToChart(f.gx, f.gy, f.side, f.face);
     if (!m) continue;
     const def = FOOD_DEF[f.type];
-    const pad = MAP_PX * 0.16;
-    ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
-    ctx.fillRect(m.cx - MAP_PX / 2 + pad, m.cy - MAP_PX / 2 + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(m.cx - MAP_PX / 2 + pad, m.cy - MAP_PX / 2 + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+    drawChartFruit(ctx, m.cx, m.cy, MAP_PX, '#' + def.color.toString(16).padStart(6, '0'));
   }
 
   // Snake (tail first, head on top)
@@ -3712,39 +3491,19 @@ function drawMiniMap() {
     const s = snake[i];
     const m = worldToChart(s.gx, s.gy, s.side, s.face);
     if (!m) continue;
-    const pad = 1;
-    const x = m.cx - MAP_PX / 2;
-    const y = m.cy - MAP_PX / 2;
-    if (i === 0) {
-      ctx.fillStyle = '#ffdd57';
-      ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
-      // Eyes
-      const er = MAP_PX * 0.10;
-      ctx.fillStyle = '#061018';
-      let ex1, ey1, ex2, ey2;
-      if (dir.dx === 1)       { ex1 = m.cx + MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
-      else if (dir.dx === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx - MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
-      else if (dir.dy === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy - MAP_PX*0.18; }
-      else                    { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy + MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
-      ctx.beginPath(); ctx.arc(ex1, ey1, er, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(ex2, ey2, er, 0, Math.PI * 2); ctx.fill();
-    } else {
-      const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
-      ctx.fillStyle = `rgba(255,140,66,${alpha.toFixed(2)})`;
-      ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
-    }
+    drawChartSnake(ctx, m.cx, m.cy, MAP_PX, i === 0, 0.7 + 0.3 * (1 - i / snake.length), dir);
   }
 
   // Center cell highlight
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.strokeStyle = 'rgba(74,129,98,0.65)';
   ctx.lineWidth = 2;
   const chx = MAP_HALF * MAP_PX, chy = MAP_HALF * MAP_PX;
-  ctx.strokeRect(chx + 0.5, chy + 0.5, MAP_PX - 1, MAP_PX - 1);
+  ctx.beginPath(); ctx.roundRect(chx + 0.5, chy + 0.5, MAP_PX - 1, MAP_PX - 1, 7); ctx.stroke();
 
   // Direction arrow on head
   const acx = MAP_HALF * MAP_PX + MAP_PX / 2;
   const acy = MAP_HALF * MAP_PX + MAP_PX / 2;
-  ctx.fillStyle = '#061018';
+  ctx.fillStyle = 'rgba(76,77,52,0.55)';
   ctx.beginPath();
   const alen = MAP_PX * 0.3;
   const ax = acx + dir.dx * alen;
@@ -3763,6 +3522,7 @@ function render() {
   requestAnimationFrame(render);
 
   redrawTexture();
+  clayActors.update(performance.now());
   drawMiniMap();
   updatePi1Panel();
   renderer.render(scene, camera);
