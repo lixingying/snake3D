@@ -92,6 +92,7 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       return { ...q, r: vector(footprint.right), f: vector(footprint.forward) };
     };
     const body = state.snake.map(pose);
+    const companionBody = (state.companionSnake || []).map(pose);
     ctx.lineCap = ctx.lineJoin = 'round';
     // Widths and heads use the chart differential too: local coordinates may
     // distort lengths, so a world-space round body need not be a 2D circle.
@@ -101,11 +102,11 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       ctx.save(); ctx.transform(p.r.x, p.r.y, p.f.x, p.f.y, p.x, p.y);
       ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, scale, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
-    function ribbon(color, width) {
+    function ribbon(samples, color, width) {
       ctx.fillStyle = color;
       let previous = null;
-      for (let i = body.length - 1; i >= 0; i--) {
-        const p = body[i];
+      for (let i = samples.length - 1; i >= 0; i--) {
+        const p = samples[i];
         if (!p) { previous = null; continue; }
         if (previous && Math.hypot(previous.x - p.x, previous.y - p.y) < state.spacing * zoom * 5) {
           const quad = [offset(previous, width), offset(p, width), offset(p, -width), offset(previous, -width)];
@@ -114,7 +115,9 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
         disk(p, color, width); previous = p;
       }
     }
-    ribbon('#d67a49', 1.04); ribbon('#eea568', 0.88);
+    for (const samples of [body, companionBody]) {
+      ribbon(samples, '#d67a49', 1.04); ribbon(samples, '#eea568', 0.88);
+    }
     const visibleFoods = [];
     for (const food of state.foods) {
       const p = pose(food);
@@ -137,7 +140,7 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       ctx.restore();
     }
     ctx.restore(); viewport(); ctx.strokeStyle = '#fff5cc'; ctx.lineWidth = 3; ctx.stroke();
-    snapshot = { chart, centre, up, handedness, boundary, domainBoundary, body, foods: visibleFoods, size, zoom };
+    snapshot = { chart, centre, up, handedness, boundary, domainBoundary, body, companionBody, foods: visibleFoods, size, zoom };
   }
   return { update, reset() { chart = null; lastHead = null; cached = new WeakMap(); }, get chart() { return chart; }, get snapshot() { return snapshot; } };
 }

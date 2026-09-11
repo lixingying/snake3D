@@ -127,13 +127,14 @@ function run(THREE) {
   assert.notEqual(after.face, slant.face);
   assert.ok(before.dot(sphere.navigation.frame(after).forward) > 0.999, 'Heading continues across a sphere seam');
 
-  // The RP² state convention from the restored game is retained. A continuous
-  // cut crossing changes the homotopy word, without adding a new side rule.
+  // The two lifts of an RP² generator exchange local sides after one turn.
   const rp = apps.projective.navigation;
   const rpStart = rp.seed(0.21, 0.5);
   const rpOnce = rp.trace(rpStart, 1, 0).point;
   assert.equal(rpOnce.topo.word.join(''), 'a');
-  assert.equal(rpOnce.side, rpStart.side);
+  assert.equal(rpOnce.side, -rpStart.side);
+  assert.ok(rp.samePoint(rpOnce, rp.oppositeSide(rpStart)));
+  assert.equal(rp.samePoint(rpOnce, rpStart), false);
   assert.equal(rp.trace(rpOnce, 1, 0).point.topo.word.length, 0);
 
   // Exercise actual self-contact, rather than only the group helper.

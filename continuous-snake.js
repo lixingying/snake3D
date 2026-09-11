@@ -5,12 +5,12 @@
 // frame rate and keyboard repeat events never determine the game trajectory.
 function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onEvent = () => {},
   radius = 0.052, initialLength = 1.4, initialSpeed = 0.9, turnRate = 4,
-  random = Math.random, foodWeights = { grow: 52, slow: 12, shrink: 24, speedUp: 12 } }) {
+  pairedSides = false, random = Math.random, foodWeights = { grow: 52, slow: 12, shrink: 24, speedUp: 12 } }) {
   const STEP = 1 / 120, SPACING = 0.065, FOOD_LIFETIME = 33;
   let trail = [], foods = [], head, length = initialLength, speed = initialSpeed;
   let score = 0, running = true, paused = false, accumulator = 0, spawnClock = 0;
   let turn = 0, contactCooldown = 0, lastClosure = null, revision = 0;
-  let renderSnake = [], renderRevision = -1;
+  let renderSnake = [], companionSnake = [], renderRevision = -1;
 
   function node(p, s) { return { ...nav.copy(p), s, position: nav.pointAt(p) }; }
 
@@ -31,6 +31,15 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
     if (trail.length > 1 && trail[0].s < tailS) trail[0] = node(sampleAt(tailS), tailS);
   }
 
+  // The companion is the other lift of this same trail. Checking one head
+  // against both lifts also covers the companion head, by symmetry.
+  function contact(a, b, c, d, radius) {
+    const hit = nav.contact(a, b, c, d, radius);
+    const other = pairedSides && nav.contact(a, b, nav.oppositeSide(c), nav.oppositeSide(d), radius);
+    if (other && (!hit || other.s < hit.s)) return { ...other, companion: true };
+    return hit ? { ...hit, companion: false } : null;
+  }
+
   function spawnFood() {
     if (foods.length >= 9) return;
     const total = Object.values(foodWeights).reduce((a, b) => a + b, 0);
@@ -40,7 +49,8 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
       const p = randomPoint(random), position = nav.pointAt(p);
       const occupied = [...trail, ...foods].some(item => {
         const world = item.position || nav.pointAt(item);
-        return world.distanceTo(position) < radius * 4 && nav.nearby(p, item, radius * 3).length > 0;
+        return world.distanceTo(position) < radius * 4 && (nav.nearby(p, item, radius * 3).length > 0 ||
+          pairedSides && nav.nearby(p, nav.oppositeSide(item), radius * 3).length > 0);
       });
       if (!occupied) { foods.push({ ...p, position, type, age: 0 }); return; }
     }
@@ -98,17 +108,18 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
         for (let i = 0; i + 1 < trail.length; i++) {
           const a = trail[i], b = trail[i + 1];
           if (head.s - b.s < Math.max(radius * 6, 0.32) || b.s <= a.s) continue;
-          const hit = nav.contact(segment.from, segment.to, a, b, radius * 1.65);
+          const hit = contact(segment.from, segment.to, a, b, radius * 1.65);
           if (hit && (!collision || hit.s < collision.hit.s)) collision = { hit, a, b };
         }
       }
       if (collision) {
         const { hit, a, b } = collision;
         const bodyPoint = nav.interpolate(a, b, hit.t);
+        const target = hit.companion ? nav.oppositeSide(bodyPoint) : bodyPoint;
         const headPoint = nav.interpolate(segment.from, segment.to, hit.s);
-        const joined = nav.closeAt(headPoint, bodyPoint);
-        if (joined && nav.samePoint(joined, bodyPoint, 0.001)) {
-          lastClosure = classifyLoop(bodyPoint.topo, joined.topo);
+        const joined = nav.closeAt(headPoint, target);
+        if (joined && nav.samePoint(joined, target, 0.001)) {
+          lastClosure = { ...classifyLoop(bodyPoint.topo, joined.topo, { from: bodyPoint, to: joined }), companion: hit.companion };
           append([{ from: segment.from, to: headPoint, length: segment.length * hit.s }]);
           length = Math.max(0.32, head.s - bodyPoint.s);
           trim();
@@ -118,7 +129,7 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
         }
       }
       for (const food of [...foods]) {
-        if (nav.contact(segment.from, segment.to, food, food, radius * 1.9)) eat(food);
+        if (contact(segment.from, segment.to, food, food, radius * 1.9)) eat(food);
       }
       append([segment]);
     }
@@ -139,9 +150,10 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
       renderSnake = [];
       for (let s = head.s; s > trail[0].s; s -= SPACING) renderSnake.push(sampleAt(s));
       renderSnake.push(nav.copy(trail[0]));
+      companionSnake = pairedSides ? renderSnake.map(nav.oppositeSide) : [];
       renderRevision = revision;
     }
-    return { snake: renderSnake, foods, direction: { dx: head.du, dy: head.dv },
+    return { snake: renderSnake, companionSnake, foods, direction: { dx: head.du, dy: head.dv },
       running, paused, score, speed, scale: 1, continuous: true, radius, spacing: SPACING,
       foodLifetime: FOOD_LIFETIME, lastClosure, length, head, trail };
   }

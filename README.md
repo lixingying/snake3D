@@ -41,7 +41,7 @@ Mobile:
 - Sphere: form any closed loop.
 - Torus: form a nontrivial loop.
 - Genus 2: form a nontrivial loop.
-- Projective plane: form a nontrivial loop.
+- Projective plane: form a nontrivial loop with either of two synchronized snakes on opposite local sides; both grow and are cut together.
 - Mobius strip: form a nontrivial loop without crossing the boundary.
 - Klein bottle: form a nontrivial loop.
 
@@ -120,7 +120,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 球面：形成任意闭合环路。
 - 环面：形成非平凡环路。
 - 双孔曲面：形成非平凡环路。
-- 射影平面：形成非平凡环路。
+- 射影平面：两条蛇在相反的局部侧同步移动，可与任意一条蛇接成非平凡环路；增长和切断同步。
 - 莫比乌斯带：形成不跨边界的非平凡环路。
 - 克莱因瓶：形成非平凡环路。
 

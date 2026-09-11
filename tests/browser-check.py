@@ -80,6 +80,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', default='/tmp/snake3d-browser-check')
     parser.add_argument('--maps', default='torus,sphere,mobius,projective,klein,genus2')
+    parser.add_argument('--mobile-map', default='torus')
     args = parser.parse_args()
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
@@ -114,12 +115,17 @@ def main():
                 report = page.js('''(() => {
                   const d = window.snakeDebug, state = d.game.state();
                   const bad = [];
-                  d.clayActors.group.traverse(o => { if (![...o.position.toArray(), ...o.quaternion.toArray(), ...o.scale.toArray()].every(Number.isFinite)) bad.push(o.name); });
+                  for (const actors of [d.clayActors, d.companionActors].filter(Boolean))
+                    actors.group.traverse(o => { if (![...o.position.toArray(), ...o.quaternion.toArray(), ...o.scale.toArray()].every(Number.isFinite)) bad.push(o.name); });
                   const canvas = document.getElementById('canvas-container').getBoundingClientRect(), chart = document.getElementById('map-panel').getBoundingClientRect();
-                  return { map: new URLSearchParams(location.search).get('map'), invalidObjects: bad, fruits: d.clayActors.group.children.filter(o => o.name === 'fruit' && o.visible).length, separated: canvas.right <= chart.left, bodyPoints: d.chartView.snapshot.body.filter(Boolean).length };
+                  const paired = d.companionActors ? state.companionSnake.length === state.snake.length &&
+                    state.snake.every((p,i) => { const q=state.companionSnake[i]; return p.u===q.u && p.v===q.v && p.side===-q.side; }) &&
+                    d.clayActors.group.getObjectByName('snake-head').position.distanceTo(d.companionActors.group.getObjectByName('snake-head').position) > .09 : false;
+                  return { map: new URLSearchParams(location.search).get('map'), invalidObjects: bad, fruits: d.clayActors.group.children.filter(o => o.name === 'fruit' && o.visible).length, separated: canvas.right <= chart.left, bodyPoints: d.chartView.snapshot.body.filter(Boolean).length, pairedSnakes: paired };
                 })()''')
                 assert not report['invalidObjects'], report
                 assert report['fruits'] > 0 and report['separated'], report
+                assert report['pairedSnakes'] == (kind == 'projective'), report
                 page.screenshot(output / (kind + '.png'))
                 report['steering'] = {}
                 for key, sign in [('ArrowLeft', -1), ('ArrowRight', 1)]:
@@ -157,7 +163,7 @@ def main():
                   return {before, after: {u:d.game.state().head.u,v:d.game.state().head.v,face:d.game.state().head.face}, running:d.game.state().running};
                 })()""")
                 page.js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-                invalid = page.js("(() => {const bad=[];window.snakeDebug.clayActors.group.traverse(o => {if(![...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray()].every(Number.isFinite))bad.push(o.name);});return bad;})()")
+                invalid = page.js("(() => {const bad=[];const d=window.snakeDebug;for(const actors of [d.clayActors,d.companionActors].filter(Boolean))actors.group.traverse(o => {if(![...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray()].every(Number.isFinite))bad.push(o.name);});return bad;})()")
                 assert not invalid, (kind, 'invalid seam render', invalid)
                 page.screenshot(output / (kind + '-seam.png'))
                 report['seam'] = seam
@@ -167,7 +173,7 @@ def main():
                 print(json.dumps(report), flush=True)
             page.call('Emulation.setDeviceMetricsOverride', {'width': 390, 'height': 844, 'deviceScaleFactor': 2, 'mobile': True})
             page.call('Emulation.setTouchEmulationEnabled', {'enabled': True})
-            page.call('Page.navigate', {'url': (ROOT / 'snake3d.html').as_uri() + '?map=torus&lang=zh&debug=1'})
+            page.call('Page.navigate', {'url': (ROOT / 'snake3d.html').as_uri() + '?map=' + args.mobile_map + '&lang=zh&debug=1'})
             for attempt in range(350):
                 if page.js('!!window.snakeDebug'):
                     break

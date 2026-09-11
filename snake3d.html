@@ -1741,6 +1741,7 @@ function handleContinuousEvent(event) {
 
 const continuousGame = createContinuousSnake({
   navigation, classifyLoop: topologyDifferenceInfo, randomPoint: randomSurfacePoint,
+  pairedSides: MAP_TYPE === 'projective',
   initialSpeed: THREE.MathUtils.clamp(0.9 * 150 / INITIAL_SPEED_MS, 0.35, 2.5),
   foodWeights: Object.fromEntries(Object.entries(FOOD_DEF).map(([name, def]) => [name, def.weight])),
   onEvent: handleContinuousEvent,
@@ -1768,6 +1769,19 @@ const clayActors = createClayActors({
   THREE, parent: surfaceGroup, frameAt: visualCellFrame, frameBetween: visualFrameBetween,
   getState: () => continuousGame.state(),
 });
+const companionActors = MAP_TYPE === 'projective' ? createClayActors({
+  THREE, parent: surfaceGroup, frameAt: visualCellFrame, mirrored: true,
+  frameBetween: (from, to, t) => {
+    const frame = visualFrameBetween(from, to, t);
+    frame.normal.negate();
+    return frame;
+  },
+  getState: () => {
+    const state = continuousGame.state();
+    return { ...state, snake: state.companionSnake, foods: [] };
+  },
+}) : null;
+if (companionActors) companionActors.group.name = 'companion-snake';
 
 
 function disposeMaterial(material) {
@@ -2623,7 +2637,7 @@ function describeTopologyMove(from, moveDir) {
   return null;
 }
 
-function topologyDifferenceInfo(fromTopo, toTopo) {
+function topologyDifferenceInfo(fromTopo, toTopo, closure = null) {
   if (MAP_TYPE === 'sphere') {
     return {
       nontrivial: true,
@@ -2659,6 +2673,11 @@ function topologyDifferenceInfo(fromTopo, toTopo) {
     ...invertTopologyWord(fromTopo?.word || []),
     ...(toTopo?.word || []),
   ];
+  // At the disk boundary a closed loop can end at the antipodal representative
+  // of its start. Complete that final identification even when the connector
+  // has zero length and therefore never crosses a cut in trace().
+  if (MAP_TYPE === 'projective' && closure &&
+      atlasSpherePoint(closure.from).dot(atlasSpherePoint(closure.to)) < 0) rawWord.push('a');
   const word = reduceTopologyWord(rawWord);
   return {
     nontrivial: word.length > 0,
@@ -2888,6 +2907,7 @@ function render(now = performance.now()) {
   syncContinuousState();
   redrawTexture();
   clayActors.update(now);
+  companionActors?.update(now);
   drawMiniMap();
   updatePi1Panel();
   updateUI();
@@ -2896,7 +2916,7 @@ function render(now = performance.now()) {
 
 let lastRenderTime = null;
 init();
-if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, surfacePoint, THREE };
+if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, companionActors, surfacePoint, THREE };
 render();
 </script>
 </body>

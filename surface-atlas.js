@@ -32,9 +32,12 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
       if (across.dot(su.clone().multiplyScalar(uvRight.u).addScaledVector(sv, uvRight.v)) < 0) across.negate();
       const maxAngle = mapType === 'projective' ? Math.PI * 0.47 : Math.PI * 0.8;
       project = target => {
-        if (target.side !== origin.side) return null;
         const s = sphereAt(target).normalize();
-        if (mapType === 'projective' && s.dot(north) < 0) s.negate();
+        // Antipodal representatives reverse the local side. Compare sides in
+        // this chart, not the signs stored in two different square patches.
+        const sign = mapType === 'projective' && s.dot(north) < 0 ? -1 : 1;
+        if (target.side * sign !== origin.side) return null;
+        s.multiplyScalar(sign);
         const cosine = clamp(s.dot(north), -1, 1), angle = Math.acos(cosine);
         if (angle >= maxAngle) return null;
         const scale = angle < 1e-8 ? sphereScale : sphereScale * angle / Math.sin(angle);
@@ -45,7 +48,9 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
         if (angle >= maxAngle) return null;
         const s = north.clone().multiplyScalar(Math.cos(angle));
         if (distance > 1e-10) s.addScaledVector(across, Math.sin(angle) * x / distance).addScaledVector(up, Math.sin(angle) * y / distance);
-        return { ...nav.copy(origin), ...sphereToPoint(s) };
+        const point = { ...nav.copy(origin), ...sphereToPoint(s) };
+        if (mapType === 'projective' && sphereAt(point).dot(s) < 0) point.side *= -1;
+        return point;
       };
     } else if (mapType !== 'genus2') {
       // A single lift of the parameter rectangle. Bounds are strictly below
@@ -178,6 +183,7 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
       return { right: derivative(across), forward: derivative(pf.forward) };
     }
     function connect(target) {
+      if (mapType === 'projective' && nav.samePoint(origin, target)) return nav.copy(origin);
       const q = project(target);
       if (!q) return null;
       if (mapType !== 'projective') return unproject(q.x, q.y);

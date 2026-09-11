@@ -11,6 +11,7 @@ function createSurfaceNavigator({ THREE, mapType, resolution, pointAt, normalAt,
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
   const wrap = x => ((x % 1) + 1) % 1;
   const copy = p => ({ ...p, position: undefined, topo: cloneTopology(p.topo) });
+  const oppositeSide = p => ({ ...copy(p), side: -(p.side ?? 1) });
   let chartFactory = null;
 
   function reverse(p, origin) {
@@ -50,13 +51,13 @@ function createSurfaceNavigator({ THREE, mapType, resolution, pointAt, normalAt,
       } else if (mapType === 'klein') {
         q.v = 0.5 - p.v; q.dv = -p.dv;
       }
-      if (mapType === 'mobius' || mapType === 'klein') q.side = -p.side;
+      if (mapType === 'projective' || mapType === 'mobius' || mapType === 'klein') q.side = -p.side;
     } else if (mapType === 'mobius') {
       q.v = edge === 'U' ? -p.v : 2 - p.v;
       q.dv = -p.dv; q.side = -p.side;
     } else {
       q.v += edge === 'U' ? 1 : -1;
-      if (mapType === 'projective') { q.u = 1 - p.u; q.du = -p.du; }
+      if (mapType === 'projective') { q.u = 1 - p.u; q.du = -p.du; q.side = -p.side; }
     }
     return q;
   }
@@ -278,7 +279,7 @@ function createSurfaceNavigator({ THREE, mapType, resolution, pointAt, normalAt,
   function seed(u, v, face = null, side = 1) {
     return { u, v, face, side, du: 1, dv: 0, topo: emptyTopology() };
   }
-  return { frame, trace, move, glue, interpolate, images, nearby, samePoint, contact, closeAt, seed, pointAt, copy, reverse,
+  return { frame, trace, move, glue, interpolate, images, nearby, samePoint, contact, closeAt, seed, pointAt, copy, reverse, oppositeSide,
     setChartFactory(factory) { chartFactory = factory; } };
 }
 
