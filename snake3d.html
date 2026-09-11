@@ -1223,13 +1223,14 @@ scene.fog = new THREE.Fog(0xe6eee5, 9, 18);
 const surfaceGroup = new THREE.Group();
 scene.add(surfaceGroup);
 
-const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
-camera.position.set(2.94, 2.352, 4.62);
-camera.lookAt(0, 0, 0);
-const DEFAULT_CAMERA_POSITION = new THREE.Vector3(2.94, 2.352, 4.62);
-const GENUS2_CAMERA_POSITION = new THREE.Vector3(2.75, 2.2, 4.32);
-const MOBILE_CAMERA_DISTANCE_SCALE = 0.84;
+const DEFAULT_CAMERA_POSITION = new THREE.Vector3(2.94, 2.352, 4.62).multiplyScalar(0.8);
+const GENUS2_CAMERA_POSITION = new THREE.Vector3(2.75, 2.2, 4.32).multiplyScalar(0.8);
+const MOBILE_CAMERA_DISTANCE_SCALE = 0.95;
 const MOBILE_VIEW_QUERY = window.matchMedia('(max-width: 700px), (pointer: coarse) and (max-width: 980px)');
+
+const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
+camera.position.copy(DEFAULT_CAMERA_POSITION);
+camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(container.clientWidth, container.clientHeight);
@@ -1382,6 +1383,11 @@ renderer.domElement.addEventListener('wheel', e => {
    DYNAMIC SURFACE TEXTURE
    =========================== */
 const TEX_SIZE = 512;
+// Texture subdivisions are visual only and independent of the topology cuts.
+const SURFACE_GRID = {
+  torus: [40, 16], sphere: [8, 8], genus2: [4, 4],
+  mobius: [40, 6], projective: [24, 24], klein: [36, 20],
+};
 const texCanvas = document.createElement('canvas');
 const texCtx = texCanvas.getContext('2d');
 const markCanvasFront = document.createElement('canvas');
@@ -1540,6 +1546,31 @@ function drawTopologyCutMarks() {
   drawKleinCutMarks(markCtxBack);
 }
 
+function drawSurfaceGrid(ctx, size) {
+  const [columns, rows] = SURFACE_GRID[MAP_TYPE];
+  const width = size / columns, height = size / rows;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 253, 239, 0.07)';
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < columns; x++) {
+      if ((x + y) % 2 === 0) ctx.fillRect(x * width, y * height, width, height);
+    }
+  }
+  ctx.strokeStyle = 'rgba(39, 58, 52, 0.2)';
+  ctx.lineWidth = Math.max(0.8, width * 0.055);
+  ctx.beginPath();
+  for (let x = 0; x <= columns; x++) {
+    ctx.moveTo(x * width, 0); ctx.lineTo(x * width, size);
+  }
+  ctx.stroke();
+  ctx.lineWidth = Math.max(0.8, height * 0.055);
+  ctx.beginPath();
+  for (let y = 0; y <= rows; y++) {
+    ctx.moveTo(0, y * height); ctx.lineTo(size, y * height);
+  }
+  ctx.stroke(); ctx.restore();
+}
+
 let textureHintState = null;
 function redrawTexture() {
   // Surface and cut textures are static between hint toggles. Actors are meshes.
@@ -1552,7 +1583,7 @@ function redrawTexture() {
   ctx.fillStyle = SURFACE_PALETTE[MAP_TYPE];
   ctx.fillRect(0, 0, size, size);
 
-  // The surface has no movement grid; optional cut marks remain available.
+  drawSurfaceGrid(ctx, size);
 
   markCtxFront.clearRect(0, 0, size, size);
   markCtxBack.clearRect(0, 0, size, size);
@@ -2739,6 +2770,7 @@ function addMsg(text, cls, duration = 1600) {
    =========================== */
 function resetCamera() {
   const position = (MAP_TYPE === 'genus2' ? GENUS2_CAMERA_POSITION : DEFAULT_CAMERA_POSITION).clone();
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'klein') position.multiplyScalar(0.85);
   if (MOBILE_VIEW_QUERY.matches) position.multiplyScalar(MOBILE_CAMERA_DISTANCE_SCALE);
   camera.position.copy(position);
   camera.lookAt(0, 0, 0);
