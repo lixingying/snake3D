@@ -2,7 +2,7 @@
 'use strict';
 
 // A chart maps ONE connected surface neighbourhood to the plane. In particular,
-// a projection of an immersed surface is not enough to identify its sheet.
+// a projection of a 3D surface model is not enough to identify its sheet.
 function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereToPoint, sphereScale = 1.2, implicitSurface }) {
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const finite = p => p && Number.isFinite(p.x) && Number.isFinite(p.y);

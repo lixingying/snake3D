@@ -1,7 +1,7 @@
 /* Snake on Surfaces · Copyright 2026 Xingying Li · Apache-2.0 */
 'use strict';
 
-// Time-based motion and a trail measured in world-space arc length. Rendering,
+// Time-based motion and a trail measured in the navigation metric. Rendering,
 // frame rate and keyboard repeat events never determine the game trajectory.
 function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onEvent = () => {},
   radius = 0.052, initialLength = 1.4, initialSpeed = 0.9, turnRate = 4,

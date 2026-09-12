@@ -1173,15 +1173,8 @@ function createMobiusGeometry() {
   return createParametricGridGeometry(128, 20, mobiusPointUV);
 }
 
-function projectiveSquareToDisk(a, b) {
-  return {
-    x: a * Math.sqrt(Math.max(0, 1 - (b * b) / 2)),
-    y: b * Math.sqrt(Math.max(0, 1 - (a * a) / 2)),
-  };
-}
-
 function projectivePointUV(u01, v01) {
-  return boySurfacePoint(THREE, u01, v01, 1.1 * fieldScale);
+  return crossCapSurfacePoint(THREE, u01, v01, 1.35 * fieldScale);
 }
 
 function createProjectiveGeometry() {
@@ -1665,22 +1658,23 @@ function continuousPatchTransition(p, edge) {
 
 const navigation = createSurfaceNavigator({
   THREE, mapType: MAP_TYPE, resolution: MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : CUT_GRID_SIZE,
-  pointAt: surfacePoint, patchTransition: continuousPatchTransition,
+  // RP² motion uses the smooth cover, independently of the cross-cap's pinches.
+  pointAt: MAP_TYPE === 'projective'
+    ? p => projectiveSpherePoint(THREE, p.u, p.v).multiplyScalar(1.35 * (p.side ?? 1))
+    : surfacePoint,
+  patchTransition: continuousPatchTransition,
   normalAt: (p, position, du, dv) => {
     if (MAP_TYPE === 'sphere') return position.clone().normalize();
+    if (MAP_TYPE === 'projective') return position.clone().normalize().negate();
     if (MAP_TYPE === 'genus2') return estimateGenus2Normal(position.x, position.y, position.z);
-    return new THREE.Vector3().crossVectors(du, dv)
-      .multiplyScalar((p.side ?? 1) * (MAP_TYPE === 'projective' ? -1 : 1));
+    return new THREE.Vector3().crossVectors(du, dv).multiplyScalar(p.side ?? 1);
   },
   advanceTopology: advanceTopologyState, cloneTopology: cloneTopologyState, emptyTopology: emptyTopologyState,
 });
 
 function atlasSpherePoint(p) {
   if (MAP_TYPE === 'sphere') return cubeSpherePoint(p.face || 'F', p.u, p.v).normalize();
-  const disk = projectiveSquareToDisk(2 * p.u - 1, 2 * p.v - 1);
-  const r = Math.min(1, Math.hypot(disk.x, disk.y)), angle = r * Math.PI / 2;
-  const scale = r > 1e-10 ? Math.sin(angle) / r : Math.PI / 2;
-  return new THREE.Vector3(disk.x * scale, disk.y * scale, Math.cos(angle));
+  return projectiveSpherePoint(THREE, p.u, p.v);
 }
 
 function atlasPointFromSphere(s) {
@@ -1754,8 +1748,15 @@ function syncContinuousState() {
   return state;
 }
 
-function visualCellFrame(item) {
+function visualSurfaceFrame(item) {
   const frame = navigation.frame(item);
+  return MAP_TYPE === 'projective'
+    ? crossCapFrame(THREE, frame.position, frame.forward, 1.35 * fieldScale)
+    : frame;
+}
+
+function visualCellFrame(item) {
+  const frame = visualSurfaceFrame(item);
   const state = continuousGame.state();
   return { position: frame.position, normal: frame.normal, forward: frame.forward,
     radius: state.radius, length: state.spacing * 0.65, reach: state.radius * 4.2 };
@@ -1771,6 +1772,7 @@ const clayActors = createClayActors({
 });
 const companionActors = MAP_TYPE === 'projective' ? createClayActors({
   THREE, parent: surfaceGroup, frameAt: visualCellFrame, mirrored: true,
+  palette: { skin: 0x3ca6b8, tail: 0x83d4ce, belly: 0xd6f4ed, cheeks: 0x65bfc3 },
   frameBetween: (from, to, t) => {
     const frame = visualFrameBetween(from, to, t);
     frame.normal.negate();
@@ -2892,7 +2894,7 @@ bindChartControlSurface(mapCanvas);
 bindChartControlSurface(document.getElementById('map-panel'));
 bindChartControlSurface(touchControlZone);
 
-const chartView = createChartView({ THREE, canvas: mapCanvas, parent: surfaceGroup, atlas, navigation,
+const chartView = createChartView({ THREE, canvas: mapCanvas, parent: surfaceGroup, atlas, navigation, frameAt: visualSurfaceFrame,
   colors: Object.fromEntries(Object.entries(FOOD_DEF).map(([key, value]) => [key, '#' + value.color.toString(16).padStart(6, '0')])) });
 function drawMiniMap() { chartView.update(continuousGame.state()); }
 
@@ -2916,7 +2918,7 @@ function render(now = performance.now()) {
 
 let lastRenderTime = null;
 init();
-if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, companionActors, surfacePoint, THREE };
+if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, companionActors, surfacePoint, surfaceFrame: visualSurfaceFrame, THREE };
 render();
 </script>
 </body>

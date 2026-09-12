@@ -1,7 +1,7 @@
 /* Snake on Surfaces · Copyright 2026 Xingying Li · Apache-2.0 */
 'use strict';
 
-function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors }) {
+function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors, frameAt = nav.frame }) {
   const ctx = canvas.getContext('2d');
   const boundaryGeometry = new THREE.BufferGeometry();
   const boundaryLine = new THREE.Line(boundaryGeometry,
@@ -20,7 +20,7 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
     chart = nextChart; outline = nextOutline; cached = new WeakMap(); footprints = new WeakMap();
     const positions = [];
     for (const q of outline) {
-      const f = q.position ? q : nav.frame(q.point);
+      const f = q.position ? q : frameAt(q.point);
       const p = f.position.clone().addScaledVector(f.normal, 0.014);
       positions.push(p.x, p.y, p.z);
     }
@@ -115,9 +115,8 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
         disk(p, color, width); previous = p;
       }
     }
-    for (const samples of [body, companionBody]) {
-      ribbon(samples, '#d67a49', 1.04); ribbon(samples, '#eea568', 0.88);
-    }
+    ribbon(body, '#d67a49', 1.04); ribbon(body, '#eea568', 0.88);
+    ribbon(companionBody, '#318da4', 1.04); ribbon(companionBody, '#64c1c8', 0.88);
     const visibleFoods = [];
     for (const food of state.foods) {
       const p = pose(food);

@@ -3,7 +3,7 @@
 
 // Presentation only. The game supplies immutable views of its cells and poses;
 // this renderer never advances, normalizes, or writes to the game state.
-function createClayActors({ THREE, parent, getState, frameAt, frameBetween, mirrored = false }) {
+function createClayActors({ THREE, parent, getState, frameAt, frameBetween, mirrored = false, palette = {} }) {
   const group = new THREE.Group();
   group.name = 'clay-actors';
   parent.add(group);
@@ -11,11 +11,11 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, mirr
   const capsule = new THREE.CapsuleGeometry(1, 1, 6, 20);
   capsule.rotateX(Math.PI / 2);
   const material = (color, roughness = 0.42) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0 });
-  const skin = material(0xe98555);
-  const cream = material(0xffdfac, 0.6);
+  const skin = material(palette.skin ?? 0xe98555);
+  const cream = material(palette.belly ?? 0xffdfac, 0.6);
   const white = material(0xfffdf1, 0.32);
   const dark = material(0x283e3b, 0.22);
-  const rose = material(0xe46751);
+  const rose = material(palette.cheeks ?? 0xe46751);
   const leafMaterial = material(0x4e9b6b, 0.65);
   const stemMaterial = material(0x88704b, 0.8);
   const bodyMaterial = material(0xffffff);
@@ -23,8 +23,8 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, mirr
     grow: material(0xefb74f), slow: material(0x70b7df),
     shrink: material(0xd96b72), speedUp: material(0x86bb60),
   };
-  const tailColor = new THREE.Color(0xf2b574);
-  const bodyColor = new THREE.Color(0xe98555);
+  const tailColor = new THREE.Color(palette.tail ?? 0xf2b574);
+  const bodyColor = skin.color.clone();
   const color = new THREE.Color();
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();

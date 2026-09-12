@@ -131,8 +131,8 @@ def main():
                 for key, sign in [('ArrowLeft', -1), ('ArrowRight', 1)]:
                     page.call('Input.dispatchKeyEvent', {'type': 'keyDown', 'key': key, 'code': key})
                     turn = page.js('''(() => {
-                      const d=window.snakeDebug, state=d.game.state(), f=d.navigation.frame(state.head);
-                      const straight=d.navigation.frame(d.navigation.move(state.head,state.speed/120).point).forward;
+                      const d=window.snakeDebug, state=d.game.state(), f=d.surfaceFrame(state.head);
+                      const straight=d.surfaceFrame(d.navigation.move(state.head,state.speed/120).point).forward;
                       d.game.setPaused(false); d.game.update(1/120); d.game.setPaused(true);
                       d.clayActors.update(performance.now());
                       const actor=d.clayActors.group.getObjectByName('snake-head');

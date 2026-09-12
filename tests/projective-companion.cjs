@@ -13,14 +13,14 @@ function lift(app, p) {
   return app.invoke('atlasSpherePoint(liftPoint).multiplyScalar(liftPoint.side)');
 }
 
-function paired(nav, state) {
+function paired(app, state) {
   assert.ok(state.snake.length > 1);
   assert.equal(state.companionSnake.length, state.snake.length);
   state.snake.forEach((p, i) => {
     const q = state.companionSnake[i];
     assert.equal(p.u, q.u); assert.equal(p.v, q.v); assert.equal(p.s, q.s);
     assert.equal(p.side, -q.side);
-    const a = nav.frame(p), b = nav.frame(q);
+    const a = app.surfaceFrame(p), b = app.surfaceFrame(q);
     assert.ok(a.position.distanceTo(b.position) < 1e-12, 'Same abstract trail');
     assert.ok(a.normal.dot(b.normal) < -0.999999, 'Opposite local sides');
     assert.ok(a.forward.dot(b.forward) > 0.999999, 'Identical motion');
@@ -62,7 +62,7 @@ function gameWithTrail(app, nodes, pairedSides = true) {
 
 function run(THREE) {
   const app = createApp(THREE, 'projective'), nav = app.navigation;
-  paired(nav, app.game.state());
+  paired(app, app.game.state());
 
   for (const edge of ['L', 'R', 'U', 'D']) for (const side of [1, -1]) {
     const p = nav.seed(edge === 'L' ? 0 : edge === 'R' ? 1 : .37,
@@ -91,7 +91,7 @@ function run(THREE) {
     assert.equal(game.state().lastClosure.companion, true, 'The nontrivial loop joins the companion');
     assert.equal(game.state().lastClosure.reducedLabel, 'a');
     assert.equal(events.filter(e => e.type === 'win').length, 1, 'One shared win event');
-    paired(nav, game.state());
+    paired(app, game.state());
     app.chartView.reset(); app.chartView.update(game.state());
     const view = app.chartView.snapshot;
     assert.ok(view.companionBody.at(-1), 'The approaching companion tail appears in the local chart');
@@ -109,7 +109,7 @@ function run(THREE) {
   assert.equal(cutGame.state().running, true);
   assert.ok(cutGame.state().length < small.at(-1).s - .03, 'The old tail is cut off');
   assert.equal(cutEvents.filter(e => e.type === 'cut').length, 1, 'One shared cut event');
-  paired(nav, cutGame.state());
+  paired(app, cutGame.state());
 
   // Equatorial half-turns are closed generators of RP². Check the lift of
   // EVERY path segment, including the square corners, without using cut words.
@@ -155,18 +155,18 @@ function run(THREE) {
     assert.equal(after.foods.includes(food), false);
     assert.equal(after.score, before.score + (type === 'grow' ? 1 : 0), 'Food is counted once');
     assert.ok(Math.abs(after.length - before.length - (type === 'grow' ? .38 : -.45)) < 1e-9);
-    paired(nav, after);
+    paired(app, after);
   }
   app.game.setTurn(.4);
   for (let i = 0; i < 60; i++) app.game.update(1 / 60);
-  paired(nav, app.game.state());
+  paired(app, app.game.state());
   app.clayActors.update(2000); app.companionActors.update(2000);
   const front = app.clayActors.group.getObjectByName('snake-head');
   const back = app.companionActors.group.getObjectByName('snake-head');
-  const centre = nav.pointAt(app.game.state().head);
+  const centre = app.surfacePoint(app.game.state().head);
   assert.ok(front.position.clone().add(back.position).multiplyScalar(.5).distanceTo(centre) < 1e-9, 'Both 3D heads straddle the same surface point');
   assert.ok(front.position.distanceTo(back.position) > .09, 'The heads are visibly separated by the surface');
-  const normal = nav.frame(app.game.state().head).normal;
+  const normal = app.surfaceFrame(app.game.state().head).normal;
   const faceParts = [], mirroredParts = [];
   front.updateWorldMatrix(true, true); back.updateWorldMatrix(true, true);
   front.traverse(object => faceParts.push(object));
@@ -186,7 +186,7 @@ function run(THREE) {
   app.game.update(.1);
   assert.equal(JSON.stringify(app.game.state()), stopped, 'Pausing stops both snakes');
   app.game.reset(nav.seed(.7, .6));
-  paired(nav, app.game.state());
+  paired(app, app.game.state());
   assert.equal(app.game.state().lastClosure, null);
 
   const torus = createApp(THREE, 'torus');

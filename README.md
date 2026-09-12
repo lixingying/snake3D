@@ -8,7 +8,7 @@ The goal is usually to form an Ouroboros: the snake closes into a loop. Differen
 
 ## Features
 
-- Six playable surfaces: sphere, torus, genus 2, Mobius strip, projective plane (Boy surface), and Klein bottle.
+- Six playable surfaces: sphere, torus, genus 2, Mobius strip, projective plane (cross-cap), and Klein bottle.
 - Side-by-side manifold and local chart views, with the chart boundary marked on the surface.
 - Surface-specific loop detection.
 - Optional topology hints showing cuts and the current group calculation.
@@ -87,7 +87,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 
 ## 功能
 
-- 六张曲面地图：球面、环面、双孔曲面、莫比乌斯带、射影平面（Boy 曲面）、克莱因瓶。
+- 六张曲面地图：球面、环面、双孔曲面、莫比乌斯带、射影平面（交叉帽）、克莱因瓶。
 - 左侧流形、右侧局部 chart，曲面上的边线标出 chart 对应的范围。
 - 针对不同曲面的环路判定。
 - 可选拓扑提示：显示 cut 和当前群计算。
