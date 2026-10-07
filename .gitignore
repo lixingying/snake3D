@@ -5,3 +5,6 @@
 .AppleDouble
 .LSOverride
 ._*  # macOS resource fork files
+
+# Local verification files
+/tests/

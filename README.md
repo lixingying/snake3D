@@ -41,7 +41,7 @@ Mobile:
 - Sphere: form any closed loop.
 - Torus: form a nontrivial loop.
 - Genus 2: form a nontrivial loop.
-- Projective plane: form a nontrivial loop with contact on the same local side. Enter a cyan portal to switch sides; the body follows. Portals leave the surface intact, and switching sides adds no generator to the loop calculation (`a² = 1`).
+- Projective plane: form a nontrivial loop.
 - Mobius strip: form a nontrivial loop without crossing the boundary.
 - Klein bottle: form a nontrivial loop.
 
@@ -121,7 +121,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 球面：形成任意闭合环路。
 - 环面：形成非平凡环路。
 - 双孔曲面：形成非平凡环路。
-- 射影平面：在同一局部侧接上，形成非平凡环路。进入青色传送口可换到另一侧，蛇身依次跟随。传送口不挖除曲面，换侧不向环路计算中添加生成元（`a² = 1`）。
+- 射影平面：形成非平凡环路。
 - 莫比乌斯带：形成不跨边界的非平凡环路。
 - 克莱因瓶：形成非平凡环路。
 
