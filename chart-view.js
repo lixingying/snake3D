@@ -3,6 +3,7 @@
 
 function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors, frameAt = nav.frame }) {
   const ctx = canvas.getContext('2d');
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const boundaryGeometry = new THREE.BufferGeometry();
   const boundaryLine = new THREE.Line(boundaryGeometry,
     new THREE.LineBasicMaterial({ color: 0xfff1bd, transparent: true, opacity: 0.95, depthWrite: false }));
@@ -92,7 +93,27 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       return { ...q, r: vector(footprint.right), f: vector(footprint.forward) };
     };
     const body = state.snake.map(pose);
-    const companionBody = (state.companionSnake || []).map(pose);
+    const visiblePortals = [];
+    for (const portal of state.portals || []) {
+      const p = point(portal) || point(nav.oppositeSide(portal));
+      if (!p) continue;
+      visiblePortals.push({ portal, ...p });
+      const r = portal.radius * zoom;
+      const phase = reducedMotion ? 0 : portal.age * .65;
+      ctx.save(); ctx.shadowColor = '#89ddeb'; ctx.shadowBlur = 6;
+      ctx.strokeStyle = '#81c9dc88'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r * .86, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#50b2d0'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (const start of [phase, phase + Math.PI]) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * .86, start, start + Math.PI * .65); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * .59, start + .5, start + 1.7); ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = portal.lifetime - portal.age < 4 ? '#d69268' : '#62bcd0'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, -Math.PI / 2,
+        -Math.PI / 2 + Math.PI * 2 * Math.max(0, 1 - portal.age / portal.lifetime)); ctx.stroke();
+      ctx.restore();
+    }
     ctx.lineCap = ctx.lineJoin = 'round';
     // Widths and heads use the chart differential too: local coordinates may
     // distort lengths, so a world-space round body need not be a 2D circle.
@@ -116,7 +137,6 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       }
     }
     ribbon(body, '#d67a49', 1.04); ribbon(body, '#eea568', 0.88);
-    ribbon(companionBody, '#318da4', 1.04); ribbon(companionBody, '#64c1c8', 0.88);
     const visibleFoods = [];
     for (const food of state.foods) {
       const p = pose(food);
@@ -139,7 +159,7 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       ctx.restore();
     }
     ctx.restore(); viewport(); ctx.strokeStyle = '#fff5cc'; ctx.lineWidth = 3; ctx.stroke();
-    snapshot = { chart, centre, up, handedness, boundary, domainBoundary, body, companionBody, foods: visibleFoods, size, zoom };
+    snapshot = { chart, centre, up, handedness, boundary, domainBoundary, body, portals: visiblePortals, foods: visibleFoods, size, zoom };
   }
   return { update, reset() { chart = null; lastHead = null; cached = new WeakMap(); }, get chart() { return chart; }, get snapshot() { return snapshot; } };
 }

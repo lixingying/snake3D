@@ -60,6 +60,8 @@ class Page:
             message = json.loads(data)
             if message.get('method') == 'Runtime.exceptionThrown':
                 self.errors.append(message['params'])
+            if message.get('method') == 'Runtime.consoleAPICalled' and message['params']['type'] == 'error':
+                self.errors.append(message['params'])
             if message.get('id') == self.serial:
                 if 'error' in message:
                     raise RuntimeError(message['error'])
@@ -115,17 +117,17 @@ def main():
                 report = page.js('''(() => {
                   const d = window.snakeDebug, state = d.game.state();
                   const bad = [];
-                  for (const actors of [d.clayActors, d.companionActors].filter(Boolean))
+                  for (const actors of [d.clayActors, d.portalActors].filter(Boolean))
                     actors.group.traverse(o => { if (![...o.position.toArray(), ...o.quaternion.toArray(), ...o.scale.toArray()].every(Number.isFinite)) bad.push(o.name); });
                   const canvas = document.getElementById('canvas-container').getBoundingClientRect(), chart = document.getElementById('map-panel').getBoundingClientRect();
-                  const paired = d.companionActors ? state.companionSnake.length === state.snake.length &&
-                    state.snake.every((p,i) => { const q=state.companionSnake[i]; return p.u===q.u && p.v===q.v && p.side===-q.side; }) &&
-                    d.clayActors.group.getObjectByName('snake-head').position.distanceTo(d.companionActors.group.getObjectByName('snake-head').position) > .09 : false;
-                  return { map: new URLSearchParams(location.search).get('map'), invalidObjects: bad, fruits: d.clayActors.group.children.filter(o => o.name === 'fruit' && o.visible).length, separated: canvas.right <= chart.left, bodyPoints: d.chartView.snapshot.body.filter(Boolean).length, pairedSnakes: paired };
+                  const heads = [];
+                  d.clayActors.group.parent.traverse(o => {if (o.name === 'snake-head') heads.push(o);});
+                  return { map: new URLSearchParams(location.search).get('map'), invalidObjects: bad, fruits: d.clayActors.group.children.filter(o => o.name === 'fruit' && o.visible).length, separated: canvas.right <= chart.left, bodyPoints: d.chartView.snapshot.body.filter(Boolean).length, snakeHeads: heads.length, portals: state.portals.length };
                 })()''')
                 assert not report['invalidObjects'], report
                 assert report['fruits'] > 0 and report['separated'], report
-                assert report['pairedSnakes'] == (kind == 'projective'), report
+                assert report['snakeHeads'] == 1, report
+                assert report['portals'] == (1 if kind == 'projective' else 0), report
                 page.screenshot(output / (kind + '.png'))
                 report['steering'] = {}
                 for key, sign in [('ArrowLeft', -1), ('ArrowRight', 1)]:
@@ -163,10 +165,26 @@ def main():
                   return {before, after: {u:d.game.state().head.u,v:d.game.state().head.v,face:d.game.state().head.face}, running:d.game.state().running};
                 })()""")
                 page.js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-                invalid = page.js("(() => {const bad=[];const d=window.snakeDebug;for(const actors of [d.clayActors,d.companionActors].filter(Boolean))actors.group.traverse(o => {if(![...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray()].every(Number.isFinite))bad.push(o.name);});return bad;})()")
+                invalid = page.js("(() => {const bad=[];const d=window.snakeDebug;for(const actors of [d.clayActors,d.portalActors].filter(Boolean))actors.group.traverse(o => {if(![...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray()].every(Number.isFinite))bad.push(o.name);});return bad;})()")
                 assert not invalid, (kind, 'invalid seam render', invalid)
                 page.screenshot(output / (kind + '-seam.png'))
                 report['seam'] = seam
+                if kind == 'projective':
+                    passage = page.js('''(() => {
+                      const d=window.snakeDebug, nav=d.navigation;
+                      d.game.reset(nav.seed(.5,.5));
+                      const state=d.game.state(), target=nav.move(state.head,.23).point;
+                      state.portals.splice(0,state.portals.length,{...target,id:99,radius:state.portalConfig.radius,age:0,lifetime:state.portalConfig.lifetime,heldActive:false});
+                      for(let i=0;i<30;i++) d.game.update(1/120);
+                      d.game.setPaused(true);
+                      const after=d.game.state();
+                      return {headSide:after.head.side,tailSide:after.snake.at(-1).side,passages:after.passages.length};
+                    })()''')
+                    assert passage == {'headSide': -1, 'tailSide': 1, 'passages': 1}, passage
+                    page.js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    assert page.js('window.snakeDebug.chartView.snapshot.portals.length') == 1
+                    page.screenshot(output / 'projective-passage.png')
+                    report['passage'] = passage
                 report['pageErrors'] = page.errors
                 assert not page.errors, report
                 reports.append(report)

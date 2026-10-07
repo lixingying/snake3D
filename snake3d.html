@@ -45,6 +45,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
       <span><span class="dot" style="background:#70b7df"></span><span id="slowLabel">Slow</span></span>
       <span><span class="dot" style="background:#d96b72"></span><span id="shrinkLabel">Shrink</span></span>
       <span><span class="dot" style="background:#86bb60"></span><span id="speedUpLabel">Speed Up</span></span>
+      <span id="portalLegend" style="display:none"><span class="dot" style="background:transparent;outline:2px solid #74c7dc;box-shadow:0 0 6px #a7e6f1"></span><span id="portalLabel">Portal · switch sides</span></span>
     </div>
     <div class="tip" id="tipText">Hold ← → / A D to steer · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -76,6 +77,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 <script src="clay-actors.js"></script>
 <script src="surface-navigation.js"></script>
 <script src="surface-atlas.js"></script>
+<script src="surface-portals.js"></script>
 <script src="chart-view.js"></script>
 <script src="continuous-snake.js"></script>
 <script type="module">
@@ -112,6 +114,8 @@ const requestedSpeed = parseInt(urlParams.get('speed'), 10);
 const INITIAL_SPEED_MS = (requestedSpeed >= 40 && requestedSpeed <= 400) ? requestedSpeed : 150;
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
+// Experimental RP² passages: probability is tested once per interval of play.
+const PROJECTIVE_PORTALS = { interval: 5, chance: 0.4, lifetime: 30, maxCount: 2, radius: 0.08, initialCount: 1 };
 const FOOD_DEF = {
   grow:    { color: 0xefb74f, weight: 52 },
   slow:    { color: 0x70b7df, weight: 12 },
@@ -142,6 +146,8 @@ const TEXT = {
     slow: 'Slow',
     shrink: 'Shrink',
     speedUp: 'Speed Up',
+    portal: 'Portal · switch sides',
+    passedPortal: 'Teleported to the other side',
     tip: 'Hold ← → / A D to steer · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
     localMap: 'Local chart',
     pi1Title: 'π1 Calculation',
@@ -206,6 +212,8 @@ const TEXT = {
     slow: '减速',
     shrink: '缩短',
     speedUp: '加速',
+    portal: '传送 · 通往另一侧',
+    passedPortal: '已传送至另一侧',
     tip: '按住 ← → / A D 转向 · P / 空格暂停 · 拖拽旋转 · 滚轮缩放 · R 重置视角',
     localMap: '局部 chart',
     pi1Title: 'π1 计算',
@@ -297,6 +305,8 @@ function applyStaticText() {
   setText('slowLabel', tr('slow'));
   setText('shrinkLabel', tr('shrink'));
   setText('speedUpLabel', tr('speedUp'));
+  setText('portalLabel', tr('portal'));
+  document.getElementById('portalLegend').style.display = MAP_TYPE === 'projective' ? '' : 'none';
   setText('tipText', tr('tip'));
   setText('mapTitle', tr('localMap'));
   setText('pi1Title', tr('pi1Title'));
@@ -1706,7 +1716,7 @@ navigation.setChartFactory(reference => atlas.createChart(reference));
 function randomSurfacePoint(random) {
   const face = MAP_TYPE === 'sphere' ? CUBE_FACE_KEYS[Math.floor(random() * CUBE_FACE_KEYS.length)]
     : MAP_TYPE === 'genus2' ? getGenus2Topology().faces[Math.floor(random() * getGenus2Topology().faces.length)].key : null;
-  const side = (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') && random() < 0.5 ? -1 : 1;
+  const side = ['mobius', 'klein', 'projective'].includes(MAP_TYPE) && random() < 0.5 ? -1 : 1;
   return navigation.seed(0.015 + random() * 0.97, 0.015 + random() * 0.97, face, side);
 }
 
@@ -1726,6 +1736,7 @@ function handleContinuousEvent(event) {
   } else if (event.type === 'shrink') addMsg(tr('shortened'), 'warn');
   else if (event.type === 'slow') addMsg(tr('slowed'), 'good');
   else if (event.type === 'speedUp') addMsg(tr('spedUp'), 'warn');
+  else if (event.type === 'portal') addMsg(tr('passedPortal'), 'good');
   else if (event.type === 'cut') addMsg(event.info.failLabel || tr('failTrivial'), 'warn');
   else if (event.type === 'win') {
     clearMsgTimer();
@@ -1735,7 +1746,7 @@ function handleContinuousEvent(event) {
 
 const continuousGame = createContinuousSnake({
   navigation, classifyLoop: topologyDifferenceInfo, randomPoint: randomSurfacePoint,
-  pairedSides: MAP_TYPE === 'projective',
+  portalSettings: MAP_TYPE === 'projective' ? PROJECTIVE_PORTALS : null,
   initialSpeed: THREE.MathUtils.clamp(0.9 * 150 / INITIAL_SPEED_MS, 0.35, 2.5),
   foodWeights: Object.fromEntries(Object.entries(FOOD_DEF).map(([name, def]) => [name, def.weight])),
   onEvent: handleContinuousEvent,
@@ -1758,8 +1769,14 @@ function visualSurfaceFrame(item) {
 function visualCellFrame(item) {
   const frame = visualSurfaceFrame(item);
   const state = continuousGame.state();
+  const passage = state.passages.find(p => Math.abs(item.s - p.s) < p.length * .5);
+  let teleportScale = 1;
+  if (passage) {
+    const t = Math.abs(item.s - passage.s) / (passage.length * .5);
+    teleportScale = .08 + .92 * t * t * (3 - 2 * t);
+  }
   return { position: frame.position, normal: frame.normal, forward: frame.forward,
-    radius: state.radius, length: state.spacing * 0.65, reach: state.radius * 4.2 };
+    radius: state.radius * teleportScale, length: state.spacing * .65 * teleportScale, reach: state.radius * 4.2 };
 }
 
 function visualFrameBetween(from, to, t) {
@@ -1770,20 +1787,7 @@ const clayActors = createClayActors({
   THREE, parent: surfaceGroup, frameAt: visualCellFrame, frameBetween: visualFrameBetween,
   getState: () => continuousGame.state(),
 });
-const companionActors = MAP_TYPE === 'projective' ? createClayActors({
-  THREE, parent: surfaceGroup, frameAt: visualCellFrame, mirrored: true,
-  palette: { skin: 0x3ca6b8, tail: 0x83d4ce, belly: 0xd6f4ed, cheeks: 0x65bfc3 },
-  frameBetween: (from, to, t) => {
-    const frame = visualFrameBetween(from, to, t);
-    frame.normal.negate();
-    return frame;
-  },
-  getState: () => {
-    const state = continuousGame.state();
-    return { ...state, snake: state.companionSnake, foods: [] };
-  },
-}) : null;
-if (companionActors) companionActors.group.name = 'companion-snake';
+let portalActors = null;
 
 
 function disposeMaterial(material) {
@@ -2860,6 +2864,10 @@ function init() {
     : MAP_TYPE === 'projective' ? navigation.seed(0.7, 0.6)
     : navigation.seed(0.12, 0.5);
   continuousGame.reset(start);
+  if (MAP_TYPE === 'projective' && !portalActors) {
+    portalActors = createSurfacePortals({ THREE, parent: surfaceGroup, atlas, frameAt: visualSurfaceFrame,
+      getState: () => continuousGame.state() });
+  }
   setMsg(''); updateUI(); resetCamera();
 }
 
@@ -2909,7 +2917,7 @@ function render(now = performance.now()) {
   syncContinuousState();
   redrawTexture();
   clayActors.update(now);
-  companionActors?.update(now);
+  portalActors?.update();
   drawMiniMap();
   updatePi1Panel();
   updateUI();
@@ -2918,7 +2926,7 @@ function render(now = performance.now()) {
 
 let lastRenderTime = null;
 init();
-if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, companionActors, surfacePoint, surfaceFrame: visualSurfaceFrame, THREE };
+if (urlParams.get('debug') === '1') window.snakeDebug = { game: continuousGame, navigation, atlas, chartView, clayActors, portalActors, surfacePoint, surfaceFrame: visualSurfaceFrame, THREE };
 render();
 </script>
 </body>

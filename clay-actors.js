@@ -3,7 +3,7 @@
 
 // Presentation only. The game supplies immutable views of its cells and poses;
 // this renderer never advances, normalizes, or writes to the game state.
-function createClayActors({ THREE, parent, getState, frameAt, frameBetween, mirrored = false, palette = {} }) {
+function createClayActors({ THREE, parent, getState, frameAt, frameBetween, palette = {} }) {
   const group = new THREE.Group();
   group.name = 'clay-actors';
   parent.add(group);
@@ -205,9 +205,6 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, mirr
         head.position.copy(position);
         head.quaternion.copy(rotation);
         head.scale.setScalar(radius * 1.12 * bite);
-        // Reversing the normal rotates both up and right. Reflect local X too
-        // so face details are mirrored in the tangent plane. Bodies are X-symmetric.
-        if (mirrored) head.scale.x *= -1;
         const stretch = Math.min(1.7, Math.max(1.1, target.length / target.radius));
         headSkin.scale.z = stretch;
         muzzle.scale.z = stretch * 0.53;

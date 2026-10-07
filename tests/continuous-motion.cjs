@@ -41,7 +41,7 @@ function createApp(THREE, map = 'torus') {
     localStorage: { getItem() { return null; }, setItem() {} }, console, Math: seededMath,
     performance: { now: () => 0 }, requestAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {},
   });
-  for (const file of ['surface-models.js', 'surface-navigation.js', 'surface-atlas.js', 'chart-view.js', 'continuous-snake.js', 'clay-actors.js']) {
+  for (const file of ['surface-models.js', 'surface-navigation.js', 'surface-atlas.js', 'surface-portals.js', 'chart-view.js', 'continuous-snake.js', 'clay-actors.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), sandbox, { filename: file });
   }
   const html = fs.readFileSync(path.join(root, 'snake3d.html'), 'utf8');
