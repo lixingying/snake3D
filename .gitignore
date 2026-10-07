@@ -1,7 +1,9 @@
-.DS_Store
-
 # macOS system files
 .DS_Store
 .AppleDouble
 .LSOverride
-._*  # macOS resource fork files
+# macOS resource fork files
+._*
+
+# Local verification scripts
+/tests/
