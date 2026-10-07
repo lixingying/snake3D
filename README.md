@@ -9,7 +9,7 @@ The goal is usually to form an Ouroboros: the snake closes into a loop. Differen
 ## Features
 
 - Six playable surfaces: sphere, torus, genus 2, Mobius strip, projective plane, and Klein bottle.
-- 3D surface view plus a local chart view.
+- 3D surface view plus a local chart view, with pale purple dashed outlines showing the snake on the opposite local side.
 - Surface-specific loop detection.
 - Optional topology hints showing cuts and the current group calculation.
 - English and Chinese UI.
@@ -89,7 +89,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 ## 功能
 
 - 六张曲面地图：球面、环面、双孔曲面、莫比乌斯带、射影平面、克莱因瓶。
-- 3D 曲面视图和局部地图视图。
+- 3D 曲面视图和局部地图视图，以淡紫色虚线显示另一局部侧的蛇。
 - 针对不同曲面的环路判定。
 - 可选拓扑提示：显示 cut 和当前群计算。
 - 英文和中文界面。

@@ -356,7 +356,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
       <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
       <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
       <span><span class="dot" style="background:#2ecc71"></span><span id="speedUpLabel">Speed Up</span></span>
-      <span id="portalLegend" style="display:none"><span class="dot" style="border:2px solid #67eeff;border-radius:50%;box-sizing:border-box"></span><span id="portalLabel">Portal · switch sides</span></span>
+      <span id="portalLegend" style="display:none"><span class="dot" style="border:2px solid #67eeff;border-radius:50%;box-sizing:border-box"></span><span id="portalLabel">Portal</span></span>
     </div>
     <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -412,6 +412,8 @@ localStorage.setItem('snake3dLang', LANG);
 document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
 
 const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
+// Show the opposite local side as an outline without changing occupancy.
+const SHOW_REVERSE_SNAKE = true;
 const GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
 const INITIAL_SNAKE_LENGTH = 3;
 const requestedSpeed = parseInt(urlParams.get('speed'), 10);
@@ -449,7 +451,7 @@ const TEXT = {
     slow: 'Slow',
     shrink: 'Shrink',
     speedUp: 'Speed Up',
-    portal: 'Portal · switch sides',
+    portal: 'Portal',
     teleported: 'Switched to the other side',
     tip: 'Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
     localMap: 'Chart',
@@ -515,7 +517,7 @@ const TEXT = {
     slow: '减速',
     shrink: '缩短',
     speedUp: '加速',
-    portal: '传送 · 通往另一侧',
+    portal: '传送',
     teleported: '已传送至另一侧',
     tip: '方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角',
     localMap: '局部地图',
@@ -640,16 +642,16 @@ function ensureSurfaceGeometry() {
       map: gridTex,
       roughness: 0.55,
       metalness: 0.1,
-      side: ['sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(MAP_TYPE) ? THREE.DoubleSide : THREE.FrontSide,
+      side: THREE.DoubleSide,
     });
   }
   if (!markMaterialFront) {
     if (MAP_TYPE === 'sphere') {
-      markMaterialFront = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexFront[faceKey], THREE.DoubleSide));
-      markMaterialBack = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexBack[faceKey], THREE.DoubleSide));
+      markMaterialFront = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexFront[faceKey], THREE.FrontSide));
+      markMaterialBack = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexBack[faceKey], THREE.BackSide));
     } else if (MAP_TYPE === 'genus2') {
-      markMaterialFront = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTex[face.key], THREE.DoubleSide));
-      markMaterialBack = null;
+      markMaterialFront = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTex[face.key], THREE.FrontSide));
+      markMaterialBack = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTexBack[face.key], THREE.BackSide));
     } else {
       markMaterialFront = createMarkMaterial(markTexFront, THREE.FrontSide);
       markMaterialBack = createMarkMaterial(markTexBack, THREE.BackSide);
@@ -685,18 +687,12 @@ function ensureSurfaceGeometry() {
   torusMesh.position.set(0, 0, 0);
   surfaceGroup.add(torusMesh);
 
-  if (MAP_TYPE === 'genus2') {
-    markMeshFront = new THREE.Mesh(geo, markMaterialFront);
-    markMeshFront.renderOrder = 2;
-    surfaceGroup.add(markMeshFront);
-  } else {
-    markMeshFront = new THREE.Mesh(geo, markMaterialFront);
-    markMeshBack = new THREE.Mesh(geo, markMaterialBack);
-    markMeshFront.renderOrder = 2;
-    markMeshBack.renderOrder = 2;
-    surfaceGroup.add(markMeshFront);
-    surfaceGroup.add(markMeshBack);
-  }
+  markMeshFront = new THREE.Mesh(geo, markMaterialFront);
+  markMeshBack = new THREE.Mesh(geo, markMaterialBack);
+  markMeshFront.renderOrder = 2;
+  markMeshBack.renderOrder = 2;
+  surfaceGroup.add(markMeshFront);
+  surfaceGroup.add(markMeshBack);
 
   cutOverlayGroup = createCutOverlayGroup();
   if (cutOverlayGroup) {
@@ -1704,6 +1700,8 @@ const sphereMarkTexBack = {};
 const GENUS2_FACE_TEX_SIZE = 192;
 const genus2MarkCtx = {};
 const genus2MarkTex = {};
+const genus2MarkCtxBack = {};
+const genus2MarkTexBack = {};
 
 for (const faceKey of CUBE_FACE_KEYS) {
   const frontCanvas = document.createElement('canvas');
@@ -1723,12 +1721,18 @@ for (const faceKey of CUBE_FACE_KEYS) {
 
 for (const face of getGenus2Topology().faces) {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = GENUS2_FACE_TEX_SIZE;
+  const backCanvas = document.createElement('canvas');
+  canvas.width = canvas.height = backCanvas.width = backCanvas.height = GENUS2_FACE_TEX_SIZE;
   genus2MarkCtx[face.key] = canvas.getContext('2d');
+  genus2MarkCtxBack[face.key] = backCanvas.getContext('2d');
   genus2MarkTex[face.key] = new THREE.CanvasTexture(canvas);
+  genus2MarkTexBack[face.key] = new THREE.CanvasTexture(backCanvas);
   genus2MarkTex[face.key].wrapS = genus2MarkTex[face.key].wrapT = THREE.ClampToEdgeWrapping;
+  genus2MarkTexBack[face.key].wrapS = genus2MarkTexBack[face.key].wrapT = THREE.ClampToEdgeWrapping;
   genus2MarkTex[face.key].colorSpace = THREE.SRGBColorSpace;
+  genus2MarkTexBack[face.key].colorSpace = THREE.SRGBColorSpace;
   genus2MarkTex[face.key].flipY = false;
+  genus2MarkTexBack[face.key].flipY = false;
 }
 
 function createMarkMaterial(map, side) {
@@ -1750,14 +1754,14 @@ function textureCellPx() {
   return TEX_SIZE / GRID_SIZE;
 }
 
-function markContextFor(item) {
+function markContextFor(item, side = item.side) {
   if (MAP_TYPE === 'sphere') {
-    return sphereMarkCtxFront[item.face || 'F'];
+    return (side === -1 ? sphereMarkCtxBack : sphereMarkCtxFront)[item.face || 'F'];
   }
   if (MAP_TYPE === 'genus2') {
-    return genus2MarkCtx[item.face || genus2StartFaceKey()];
+    return (side === -1 ? genus2MarkCtxBack : genus2MarkCtx)[item.face || genus2StartFaceKey()];
   }
-  return item.side === -1 ? markCtxBack : markCtxFront;
+  return side === -1 ? markCtxBack : markCtxFront;
 }
 
 function cellCenter(gx, gy, face = 'F') {
@@ -1788,6 +1792,16 @@ function drawFoodMark(ctx, f) {
   ctx.lineWidth = Math.max(1, px * 0.05);
   ctx.strokeRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
   ctx.globalAlpha = 1;
+}
+
+function drawReverseSnakeMark(ctx, cx, cy, px, isHead) {
+  const pad = px * 0.13;
+  ctx.save();
+  ctx.strokeStyle = isHead ? '#e1d5ff' : '#bba6ef';
+  ctx.lineWidth = Math.max(1.5, px * 0.06);
+  ctx.setLineDash([px * 0.18, px * 0.12]);
+  ctx.strokeRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
+  ctx.restore();
 }
 
 function drawSnakeMark(ctx, s, i) {
@@ -2008,9 +2022,19 @@ function redrawTexture() {
   }
   for (const face of getGenus2Topology().faces) {
     genus2MarkCtx[face.key].clearRect(0, 0, GENUS2_FACE_TEX_SIZE, GENUS2_FACE_TEX_SIZE);
+    genus2MarkCtxBack[face.key].clearRect(0, 0, GENUS2_FACE_TEX_SIZE, GENUS2_FACE_TEX_SIZE);
   }
 
   drawTopologyCutMarks();
+
+  if (SHOW_REVERSE_SNAKE) {
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      const { x, y } = cellCenter(s.gx, s.gy, s.face);
+      const ctx = markContextFor(s, -(s.side ?? 1));
+      drawReverseSnakeMark(ctx, x, y, textureCellPx(), i === 0);
+    }
+  }
 
   for (const f of foods) {
     drawFoodMark(markContextFor(f), f);
@@ -2036,6 +2060,7 @@ function redrawTexture() {
   }
   for (const face of getGenus2Topology().faces) {
     genus2MarkTex[face.key].needsUpdate = true;
+    genus2MarkTexBack[face.key].needsUpdate = true;
   }
 }
 
@@ -3807,6 +3832,16 @@ function drawMiniMap() {
       cx: (screenOffset.dx + MAP_HALF) * MAP_PX + MAP_PX / 2,
       cy: (screenOffset.dy + MAP_HALF) * MAP_PX + MAP_PX / 2,
     };
+  }
+
+  // Show hidden segments as outlines; keep solid marks above them.
+  if (SHOW_REVERSE_SNAKE) {
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      if (worldToChart(s.gx, s.gy, s.side, s.face)) continue;
+      const m = worldToChart(s.gx, s.gy, -(s.side ?? 1), s.face);
+      if (m) drawReverseSnakeMark(ctx, m.cx, m.cy, MAP_PX, i === 0);
+    }
   }
 
   // Food
