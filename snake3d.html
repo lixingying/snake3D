@@ -21,7 +21,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 </head>
 <body data-page="game">
 
-<div id="canvas-container"><div id="surface-caption">Manifold</div></div>
+<div id="canvas-container"></div>
 
 <div id="overlay">
   <div class="top-panel">
@@ -45,7 +45,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
       <span><span class="dot" style="background:#70b7df"></span><span id="slowLabel">Slow</span></span>
       <span><span class="dot" style="background:#d96b72"></span><span id="shrinkLabel">Shrink</span></span>
       <span><span class="dot" style="background:#86bb60"></span><span id="speedUpLabel">Speed Up</span></span>
-      <span id="portalLegend" style="display:none"><span class="dot" style="background:transparent;outline:2px solid #74c7dc;box-shadow:0 0 6px #a7e6f1"></span><span id="portalLabel">Portal · switch sides</span></span>
+      <span id="portalLegend" style="display:none"><span class="dot" style="background:transparent;outline:2px solid #74c7dc;box-shadow:0 0 6px #a7e6f1"></span><span id="portalLabel">Portal</span></span>
     </div>
     <div class="tip" id="tipText">Hold ← → / A D to steer · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -146,7 +146,7 @@ const TEXT = {
     slow: 'Slow',
     shrink: 'Shrink',
     speedUp: 'Speed Up',
-    portal: 'Portal · switch sides',
+    portal: 'Portal',
     passedPortal: 'Teleported to the other side',
     tip: 'Hold ← → / A D to steer · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
     localMap: 'Local chart',
@@ -189,7 +189,7 @@ const TEXT = {
     glueEdgeU: 'u glued edge',
     gameOver: 'Game over!',
     hitBoundary: 'Hit the boundary!',
-    grew: 'Grew +1',
+    grew: 'Grew +1 segment',
     slowed: 'Slowed down',
     shortened: 'Shortened',
     spedUp: 'Sped up',
@@ -212,10 +212,10 @@ const TEXT = {
     slow: '减速',
     shrink: '缩短',
     speedUp: '加速',
-    portal: '传送 · 通往另一侧',
+    portal: '传送',
     passedPortal: '已传送至另一侧',
     tip: '按住 ← → / A D 转向 · P / 空格暂停 · 拖拽旋转 · 滚轮缩放 · R 重置视角',
-    localMap: '局部 chart',
+    localMap: '局部地图',
     pi1Title: 'π1 计算',
     pi1Rel: '关系',
     pi1Step: '上一步',
@@ -255,7 +255,7 @@ const TEXT = {
     glueEdgeU: 'u 粘边',
     gameOver: '游戏结束！',
     hitBoundary: '撞到边界！',
-    grew: '变长 +1',
+    grew: '变长 +1节',
     slowed: '减速！',
     shortened: '身体缩短！',
     spedUp: '加速！',
@@ -1205,7 +1205,7 @@ function kleinPointUV(u01, v01) {
     z = -8 * Math.sin(u);
   }
   const y = -tube * Math.sin(v);
-  const s = 0.17 * fieldScale;
+  const s = 0.185 * fieldScale;
   return new THREE.Vector3(
     x * s,
     -z * s * 0.78,
@@ -2851,7 +2851,6 @@ document.getElementById('resetCam').addEventListener('click', resetCamera);
    =========================== */
 function init() {
   applyStaticText();
-  document.getElementById('surface-caption').textContent = LANG === 'zh' ? '流形' : 'Manifold';
   fieldScale = 1.0;
   ensureSurfaceGeometry();
   textureHintState = null;
@@ -2903,6 +2902,8 @@ bindChartControlSurface(document.getElementById('map-panel'));
 bindChartControlSurface(touchControlZone);
 
 const chartView = createChartView({ THREE, canvas: mapCanvas, parent: surfaceGroup, atlas, navigation, frameAt: visualSurfaceFrame,
+  radius: MAP_TYPE === 'genus2' ? 0.63 : MAP_TYPE === 'mobius' ? 1.2 : undefined,
+  unfold: MAP_TYPE === 'genus2' || MAP_TYPE === 'mobius',
   colors: Object.fromEntries(Object.entries(FOOD_DEF).map(([key, value]) => [key, '#' + value.color.toString(16).padStart(6, '0')])) });
 function drawMiniMap() { chartView.update(continuousGame.state()); }
 

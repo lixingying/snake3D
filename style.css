@@ -68,7 +68,6 @@ h1 { font-size: clamp(1.65rem, 4vw, 2.6rem); font-weight: 850; letter-spacing: -
 body[data-page='game'] { overflow: hidden; user-select: none; --chart-width: clamp(280px, 33vw, 430px); }
 #canvas-container { position: fixed; inset: 112px calc(var(--chart-width) + 58px) 132px 24px; z-index: 1; border-radius: 32px; background: radial-gradient(ellipse at 45% 30%, #f6f8ecb3, #dfeadf40 70%); }
 #canvas-container canvas { display: block; border-radius: inherit; }
-#surface-caption { position: absolute; top: 20px; left: 24px; color: #5c7d70; font-size: .76rem; font-weight: 750; letter-spacing: .05em; pointer-events: none; }
 #overlay { position: fixed; inset: 0; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 24px; }
 .top-panel { display: flex; flex-direction: column; align-items: center; gap: 10px; align-self: center; }
 .top-bar { display: flex; justify-content: center; gap: 28px; font-size: .8rem; background: #fffdf5eb; border: 1px solid #fff; padding: 9px 24px; border-radius: 18px; box-shadow: var(--shadow); }
@@ -108,7 +107,6 @@ body[data-page='game'] { overflow: hidden; user-select: none; --chart-width: cla
 @media (max-width: 700px), (pointer: coarse) and (max-width: 980px) and (orientation: portrait) {
   body[data-page='game'] { --chart-width: min(68vw, 34dvh, 280px); }
   #canvas-container, .pause-overlay { inset: 88px 12px calc(var(--chart-width) + 164px) 12px; border-radius: 24px; }
-  #surface-caption { top: 14px; left: 16px; font-size: .68rem; }
   #overlay { padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); }
   .top-panel { gap: 7px; }
   .top-bar { gap: 18px; font-size: .7rem; padding: 6px 16px; border-radius: 14px; }

@@ -7,14 +7,14 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const finite = p => p && Number.isFinite(p.x) && Number.isFinite(p.y);
 
-  function createChart(reference, radius = mapType === 'genus2' ? 0.55 : 0.86) {
+  function createChart(reference, radius = mapType === 'genus2' ? 0.55 : 0.86, { unfold = false } = {}) {
     const origin = nav.copy(reference), f = nav.frame(origin);
     const right = new THREE.Vector3().crossVectors(f.forward, f.normal).normalize();
     const plane = vector => ({ x: vector.dot(right), y: vector.dot(f.forward) });
     const a = plane(f.du), b = plane(f.dv), det = a.x * b.y - a.y * b.x;
     const fromUV = (u, v) => ({ x: a.x * u + b.x * v, y: a.y * u + b.y * v });
     const toUV = (x, y) => ({ u: (b.y * x - b.x * y) / det, v: (a.x * y - a.y * x) / det });
-    let project, unproject, tangent;
+    let project, unproject, tangent, displayBoundary;
 
     if (mapType === 'sphere' || mapType === 'projective') {
       // Normal coordinates on S², or on a hemisphere of its antipodal quotient.
@@ -53,9 +53,11 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
         return point;
       };
     } else if (mapType !== 'genus2') {
-      // A single lift of the parameter rectangle. Bounds are strictly below
-      // half a period, so two representatives can never enter the same chart.
-      const valid = image => Math.abs(image.u - origin.u) < 0.49 && Math.abs(image.v - origin.v) < 0.49 &&
+      // Keep periodic coordinates within a single lift. Across the Mobius
+      // strip there is no period: its display stops only at the physical edges.
+      // Contact charts keep their existing neighbourhood bounds.
+      const fullStrip = mapType === 'mobius' && unfold;
+      const valid = image => Math.abs(image.u - origin.u) < 0.49 && (fullStrip || Math.abs(image.v - origin.v) < 0.49) &&
         (mapType !== 'mobius' || image.v >= 0 && image.v <= 1);
       project = target => {
         const image = nav.images(target, origin).find(valid);
@@ -67,38 +69,138 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
         return nav.trace(origin, uv.u, uv.v).point;
       };
     } else {
-      // The embedded double torus is a graph over its tangent plane only on a
-      // bounded neighbourhood. Invert that projection by continuation from the
-      // chart centre; this excludes other handles and back-facing sheets.
-      const rawProject = target => plane(nav.pointAt(target).sub(f.position));
-      tangent = (p, vector) => plane(vector);
+      // The display can unfold bending neighbourhoods using their normal turn.
+      // Contact charts retain the original tangent-plane projection.
+      const expanded = unfold && implicitSurface;
+      function projectPosition(position) {
+        const q = plane(position.clone().sub(f.position));
+        if (!expanded) return q;
+        const cosine = clamp(implicitSurface.gradient(position).normalize().dot(f.normal), -1, 1);
+        const angle = Math.acos(cosine);
+        const stretch = angle < 1e-5 ? 1 : angle / Math.max(1e-6, Math.sin(angle));
+        return { x: q.x * stretch, y: q.y * stretch };
+      }
+      function derivative(position, vector) {
+        if (!expanded) return plane(vector);
+        const d = projectionDifferential(position);
+        return d ? { x: d.dx.dot(vector), y: d.dy.dot(vector) } : { x: 0, y: 0 };
+      }
+      function projectionDifferential(position) {
+        const gradient = implicitSurface.gradient(position), length = gradient.length();
+        if (length < 1e-8) return null;
+        const normal = gradient.clone().multiplyScalar(1 / length);
+        const cosine = clamp(normal.dot(f.normal), -1, 1), angle = Math.acos(cosine);
+        const sine = Math.sqrt(Math.max(1e-12, 1 - cosine * cosine));
+        const stretch = angle < 1e-5 ? 1 : angle / sine;
+        const rate = cosine > 0.99999 ? -1 / 3 : (angle * cosine / sine - 1) / (sine * sine);
+        const axis = f.normal.clone().addScaledVector(normal, -cosine), h = 1e-5;
+        // A Hessian-vector product gives both projected coordinate gradients.
+        const change = implicitSurface.gradient(position.clone().addScaledVector(axis, h))
+          .sub(implicitSurface.gradient(position.clone().addScaledVector(axis, -h)))
+          .multiplyScalar(rate / (2 * h * length));
+        const raw = plane(position.clone().sub(f.position));
+        return { gradient, normal, q: { x: raw.x * stretch, y: raw.y * stretch },
+          dx: right.clone().multiplyScalar(stretch).addScaledVector(change, raw.x),
+          dy: f.forward.clone().multiplyScalar(stretch).addScaledVector(change, raw.y) };
+      }
+      const rawProject = target => projectPosition(nav.pointAt(target));
+      tangent = (p, vector) => derivative(nav.pointAt(p), vector);
+      const positionSolutions = [{ x: 0, y: 0, position: f.position, normal: f.normal }];
+      function inversePosition(x, y, useCache = true) {
+        let sample = positionSolutions[0], distance = Math.hypot(x, y);
+        for (const candidate of positionSolutions) {
+          if (!useCache) break;
+          if (candidate.x * x + candidate.y * y < 0 || Math.hypot(candidate.x, candidate.y) > Math.hypot(x, y) ||
+              Math.abs(candidate.x * y - candidate.y * x) > 1e-8) continue;
+          const d = Math.hypot(x - candidate.x, y - candidate.y);
+          if (d < distance) { sample = candidate; distance = d; }
+        }
+        const start = sample;
+        function solve(tx, ty, previous) {
+          const position = previous.position.clone();
+          for (let iteration = 0; iteration < 14; iteration++) {
+            const differential = projectionDifferential(position);
+            if (!differential) return null;
+            const { gradient, normal, q, dx, dy } = differential;
+            if (normal.dot(f.normal) < -0.65 || position.distanceTo(previous.position) > 0.12) return null;
+            const errorX = tx - q.x, errorY = ty - q.y;
+            const value = implicitSurface.value(position);
+            const cross = dy.clone().cross(gradient), determinant = dx.dot(cross);
+            if (determinant < 1e-4) return null;
+            if (Math.hypot(errorX, errorY) < 2e-6 && Math.abs(value) < 1e-8) return { position, normal };
+            const delta = cross.multiplyScalar(errorX)
+              .addScaledVector(gradient.clone().cross(dx), errorY)
+              .addScaledVector(dx.clone().cross(dy), -value).multiplyScalar(1 / determinant);
+            position.add(delta.clampLength(0, 0.06));
+          }
+          return null;
+        }
+        let progress = 0, step = Math.min(1, 0.08 / Math.max(distance, 1e-8));
+        while (progress < 1) {
+          const nextProgress = Math.min(1, progress + step);
+          const next = solve(start.x + (x - start.x) * nextProgress, start.y + (y - start.y) * nextProgress, sample);
+          if (!next) {
+            step *= 0.5;
+            if (step * distance < 0.0005) return useCache && start !== positionSolutions[0] ? inversePosition(x, y, false) : null;
+            continue;
+          }
+          progress = nextProgress; sample = next;
+          step = Math.min(step * 1.5, 0.08 / Math.max(distance, 1e-8));
+        }
+        const result = { ...sample, x, y };
+        if (positionSolutions.length < 600) positionSolutions.push(result);
+        return result;
+      }
       const solutions = [{ x: 0, y: 0, point: origin }];
       unproject = (x, y) => {
         if (!finite({ x, y }) || Math.hypot(x, y) > radius * 1.5) return null;
         let seed = solutions[0], distance = Math.hypot(x, y);
         for (const candidate of solutions) {
+          // Always continue expanded UV inverses from the chart centre.
+          if (expanded) break;
           const d = Math.hypot(x - candidate.x, y - candidate.y);
           if (d < distance) { seed = candidate; distance = d; }
         }
-        let p = nav.copy(seed.point);
-        const steps = Math.max(1, Math.ceil(distance / 0.055));
-        for (let step = 1; step <= steps; step++) {
-          const tx = seed.x + (x - seed.x) * step / steps, ty = seed.y + (y - seed.y) * step / steps;
-          let converged = false;
+        function solveUV(previous, tx, ty) {
+          let p = nav.copy(previous);
           for (let iteration = 0; iteration < 12; iteration++) {
-            const pf = nav.frame(p), q = plane(pf.position.clone().sub(f.position));
-            if (pf.normal.dot(f.normal) < 0.24) return null;
+            const pf = nav.frame(p), q = projectPosition(pf.position);
+            if (pf.normal.dot(f.normal) < (expanded ? -0.65 : 0.24)) return null;
             const ex = tx - q.x, ey = ty - q.y;
-            if (Math.hypot(ex, ey) < 2e-6) { converged = true; break; }
-            const u = plane(pf.du), v = plane(pf.dv), determinant = u.x * v.y - u.y * v.x;
+            if (!expanded && Math.hypot(ex, ey) < 2e-6) return p;
+            const u = derivative(pf.position, pf.du), v = derivative(pf.position, pf.dv), determinant = u.x * v.y - u.y * v.x;
             if (Math.abs(determinant) < 1e-8) return null;
+            // Stop before the displayed coordinates fold over themselves.
+            if (expanded && determinant * pf.du.clone().cross(pf.dv).dot(pf.normal) <= 0) return null;
+            if (Math.hypot(ex, ey) < 2e-6) return p;
             let du = (v.y * ex - v.x * ey) / determinant, dv = (u.x * ey - u.y * ex) / determinant;
             const factor = Math.min(1, 0.12 / Math.max(Math.abs(du), Math.abs(dv)));
             const next = nav.trace(p, du * factor, dv * factor).point;
             if (nav.pointAt(next).distanceTo(pf.position) > 0.12) return null;
             p = next;
           }
-          if (!converged) return null;
+          return null;
+        }
+        let p = nav.copy(seed.point);
+        if (expanded) {
+          let progress = 0, step = Math.min(1, 0.045 / Math.max(distance, 1e-8));
+          while (progress < 1) {
+            const nextProgress = Math.min(1, progress + step);
+            const next = solveUV(p, x * nextProgress, y * nextProgress);
+            if (!next) {
+              step *= 0.5;
+              if (step * distance < 0.00025) return null;
+              continue;
+            }
+            p = next; progress = nextProgress;
+            step = Math.min(step * 1.5, 0.045 / Math.max(distance, 1e-8));
+          }
+        } else {
+          const steps = Math.max(1, Math.ceil(distance / 0.055));
+          for (let step = 1; step <= steps; step++) {
+            p = solveUV(p, seed.x + (x - seed.x) * step / steps, seed.y + (y - seed.y) * step / steps);
+            if (!p) return null;
+          }
         }
         if (distance > 0.012 && solutions.length < 600) solutions.push({ x, y, point: p });
         return p;
@@ -107,10 +209,29 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
         if (target.side !== origin.side) return null;
         const q = rawProject(target);
         if (Math.hypot(q.x, q.y) > radius * 1.45 || nav.pointAt(target).distanceTo(f.position) > radius * 2) return null;
+        if (expanded) {
+          // The double torus is embedded. Match the point reached by continuous
+          // inversion, so an overlapping projection cannot reveal another fold.
+          let inverse = inversePosition(q.x, q.y);
+          if (inverse && inverse.position.distanceTo(nav.pointAt(target)) >= 1e-5) inverse = inversePosition(q.x, q.y, false);
+          return inverse && inverse.position.distanceTo(nav.pointAt(target)) < 1e-5 ? q : null;
+        }
         const inverse = unproject(q.x, q.y);
         // Compare the abstract position, not just the 3D immersion.
         if (!inverse || !nav.samePoint(inverse, target, 0.0001)) return null;
         return q;
+      };
+      if (expanded) displayBoundary = angle => {
+        const x = Math.cos(angle), y = Math.sin(angle);
+        let lo = 0, hi = radius, sample = inversePosition(x * hi, y * hi);
+        if (!sample) {
+          for (let i = 0; i < 9; i++) {
+            const mid = (lo + hi) / 2;
+            if (inversePosition(x * mid, y * mid)) lo = mid; else hi = mid;
+          }
+          hi = lo * 0.99; sample = inversePosition(x * hi, y * hi);
+        }
+        return { x: x * hi, y: y * hi, position: sample?.position || f.position, normal: sample?.normal || f.normal };
       };
     }
 
@@ -126,7 +247,9 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
         for (let i = 0; i < 8; i++) {
           const position = f.position.clone().addScaledVector(ray, distance).addScaledVector(f.normal, height);
           const gradient = implicitSurface.gradient(position), derivative = gradient.dot(f.normal);
-          if (derivative < gradient.length() * 0.55 || position.distanceTo(previous.position) > 0.12) return null;
+          // Let the visible patch turn farther while retaining a margin above
+          // the inverse projection's 0.24 cutoff and rejecting branch jumps.
+          if (derivative < gradient.length() * 0.5 || position.distanceTo(previous.position) > 0.12) return null;
           const value = implicitSurface.value(position);
           if (Math.abs(value) < 1e-8) return { position, normal: gradient.normalize(), height };
           height -= clamp(value / derivative, -0.08, 0.08);
@@ -147,7 +270,8 @@ function createSurfaceAtlas({ THREE, navigation: nav, mapType, sphereAt, sphereT
       return { x: x * distance, y: y * distance, position: sample.position, normal: sample.normal };
     }
     function boundaryPoint(angle) {
-      if (mapType === 'genus2' && implicitSurface) return implicitBoundary(angle);
+      if (displayBoundary) return displayBoundary(angle);
+      if (mapType === 'genus2' && implicitSurface && !unfold) return implicitBoundary(angle);
       const x = Math.cos(angle), y = Math.sin(angle);
       let lo = 0, hi = radius, p = unproject(x * hi, y * hi);
       if (!p) {

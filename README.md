@@ -52,7 +52,7 @@ Visual settings are in `snake3d.html`, `clay-actors.js`, `chart-view.js`, and `s
 - Initial speed: `INITIAL_SPEED_MS`. Smaller values are faster.
 - Genus-2 default camera: `GENUS2_CAMERA_POSITION`.
 - Mobile camera zoom: `MOBILE_CAMERA_DISTANCE_SCALE`. Smaller values zoom in more on mobile.
-- Snake length, radius, and turning speed: `initialLength`, `radius`, `turnRate`.
+- Snake length, radius, and turning speed: `initialLength`, `segmentLength`, `radius`, `turnRate`. Start with 4 segments; each growth food adds one segment (0.15 length units).
 - Projective-plane portals: `PROJECTIVE_PORTALS` in `snake3d.html`. Start with one; every 5 seconds of play, a 40% chance to spawn another, up to two. Each lasts 60 seconds and remains active until the tail teleports.
 - Food weights and colors: `FOOD_DEF`.
 
@@ -89,7 +89,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 ## 功能
 
 - 六张曲面地图：球面、环面、双孔曲面、莫比乌斯带、射影平面（交叉帽）、克莱因瓶。
-- 左侧流形、右侧局部 chart，曲面上的边线标出 chart 对应的范围。
+- 左侧 3D 曲面、右侧局部地图，曲面上的边线标出局部地图对应的范围。
 - 针对不同曲面的环路判定。
 - 可选拓扑提示：显示 cut 和当前群计算。
 - 英文和中文界面。
@@ -132,7 +132,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 初始速度：`INITIAL_SPEED_MS`。数值越小，蛇越快。
 - 双孔曲面默认相机：`GENUS2_CAMERA_POSITION`。
 - 手机端相机距离：`MOBILE_CAMERA_DISTANCE_SCALE`。数值越小，手机端越放大。
-- 蛇的长度、粗细和转向速度：`initialLength`、`radius`、`turnRate`。
+- 蛇的长度、粗细和转向速度：`initialLength`、`segmentLength`、`radius`、`turnRate`。初始 4 节，每个增长食物增加 1 节，每节长度为 0.15。
 - 射影平面传送点：`snake3d.html` 中的 `PROJECTIVE_PORTALS`。开局一个，游玩时每 5 秒有 40% 概率新增，同时最多两个；持续 60 秒，蛇身尚在传送时等蛇尾通过再消失。
 - 食物权重和颜色：`FOOD_DEF`。
 

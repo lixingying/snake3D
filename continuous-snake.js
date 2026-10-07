@@ -4,15 +4,15 @@
 // Time-based motion and a trail measured in the navigation metric. Rendering,
 // frame rate and keyboard repeat events never determine the game trajectory.
 function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onEvent = () => {},
-  radius = 0.052, initialLength = 1.4, initialSpeed = 0.9, turnRate = 4,
+  radius = 0.052, segmentLength = 0.15, initialLength = segmentLength * 4, initialSpeed = 0.9, turnRate = 4,
   portalSettings = null, random = Math.random, foodWeights = { grow: 52, slow: 12, shrink: 24, speedUp: 12 } }) {
-  const STEP = 1 / 120, SPACING = 0.065, FOOD_LIFETIME = 33;
+  const STEP = 1 / 120, SPACING = 0.05, FOOD_LIFETIME = 33;
   const portalConfig = portalSettings && { interval: 5, chance: 0.4, lifetime: 60, maxCount: 2,
     radius: 0.08, initialCount: 1, ...portalSettings };
   let trail = [], foods = [], head, length = initialLength, speed = initialSpeed;
   let score = 0, running = true, paused = false, accumulator = 0, spawnClock = 0;
   let turn = 0, contactCooldown = 0, lastClosure = null, revision = 0;
-  let renderSnake = [], renderRevision = -1;
+  let renderSnake = [], segmentJoints = [], renderRevision = -1;
   let portals = [], passages = [], portalClock = 0, nextPortalId = 1, lockedPortal = null;
 
   function node(p, s) { return { ...nav.copy(p), s, position: nav.pointAt(p) }; }
@@ -134,7 +134,7 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
   }
 
   function eat(food) {
-    if (food.type === 'grow') { score++; length += 0.38; }
+    if (food.type === 'grow') { score++; length += segmentLength; }
     else if (food.type === 'shrink') length = Math.max(0.45, length - 0.45);
     else if (food.type === 'slow') speed = Math.max(0.35, speed * 0.86);
     else if (food.type === 'speedUp') speed = Math.min(2.5, speed * 1.16);
@@ -221,11 +221,16 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
   function state() {
     if (revision !== renderRevision) {
       renderSnake = [];
-      for (let s = head.s; s > trail[0].s; s -= SPACING) renderSnake.push(sampleAt(s));
+      const available = head.s - trail[0].s;
+      for (let i = 0; i * SPACING < available - 1e-8; i++) renderSnake.push(sampleAt(head.s - i * SPACING));
       renderSnake.push(nav.copy(trail[0]));
+      // Visible sections are independent of the finer path/render samples.
+      // Growth fills the new tail section as the snake continues moving.
+      segmentJoints = [];
+      for (let i = 1; i * segmentLength < available - 0.0001; i++) segmentJoints.push(sampleAt(head.s - i * segmentLength));
       renderRevision = revision;
     }
-    return { snake: renderSnake, foods, portals, passages, portalConfig, direction: { dx: head.du, dy: head.dv },
+    return { snake: renderSnake, segmentLength, segmentJoints, foods, portals, passages, portalConfig, direction: { dx: head.du, dy: head.dv },
       running, paused, score, speed, scale: 1, continuous: true, radius, spacing: SPACING,
       foodLifetime: FOOD_LIFETIME, lastClosure, length, head, trail };
   }

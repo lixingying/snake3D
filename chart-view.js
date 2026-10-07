@@ -1,7 +1,7 @@
 /* Snake on Surfaces · Copyright 2026 Xingying Li · Apache-2.0 */
 'use strict';
 
-function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors, frameAt = nav.frame }) {
+function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors, frameAt = nav.frame, radius, unfold = false }) {
   const ctx = canvas.getContext('2d');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const boundaryGeometry = new THREE.BufferGeometry();
@@ -32,7 +32,7 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
     boundaryGeometry.computeBoundingSphere();
   }
   function rebuild(head) {
-    const next = atlas.createChart(head);
+    const next = atlas.createChart(head, radius, { unfold });
     install(next, next.outline(32));
   }
 
@@ -92,7 +92,13 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       if (!footprint) return null;
       return { ...q, r: vector(footprint.right), f: vector(footprint.forward) };
     };
-    const body = state.snake.map(pose);
+    const body = state.snake.map((p, i) => {
+      const q = pose(p);
+      if (!q || !i || !state.segmentLength) return q;
+      const phase = (state.head.s - p.s) / state.segmentLength;
+      const width = 0.9 + 0.1 * Math.sin(Math.PI * phase) ** 2;
+      return { ...q, r: { x: q.r.x * width, y: q.r.y * width }, f: { x: q.f.x * width, y: q.f.y * width } };
+    });
     const visiblePortals = [];
     for (const portal of state.portals || []) {
       const p = point(portal) || point(nav.oppositeSide(portal));
@@ -137,6 +143,13 @@ function createChartView({ THREE, canvas, parent, atlas, navigation: nav, colors
       }
     }
     ribbon(body, '#d67a49', 1.04); ribbon(body, '#eea568', 0.88);
+    ctx.strokeStyle = '#ffdfac'; ctx.lineWidth = 1.1;
+    for (const joint of state.segmentJoints || []) {
+      const p = pose(joint);
+      if (!p) continue;
+      const a = offset(p, -0.87), b = offset(p, 0.87);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
     const visibleFoods = [];
     for (const food of state.foods) {
       const p = pose(food);

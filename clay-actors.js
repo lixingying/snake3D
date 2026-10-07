@@ -10,6 +10,7 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, pale
   const sphere = new THREE.SphereGeometry(1, 24, 16);
   const capsule = new THREE.CapsuleGeometry(1, 1, 6, 20);
   capsule.rotateX(Math.PI / 2);
+  const bandGeometry = new THREE.TorusGeometry(1, 0.04, 6, 24);
   const material = (color, roughness = 0.42) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0 });
   const skin = material(palette.skin ?? 0xe98555);
   const cream = material(palette.belly ?? 0xffdfac, 0.6);
@@ -63,11 +64,11 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, pale
   smile.rotation.z = Math.PI;
   head.add(smile);
 
-  let capacity = 0, bodyMesh, bellyMesh, neckMesh;
+  let capacity = 0, bodyMesh, bellyMesh, neckMesh, bandMesh;
   function ensureCapacity(count) {
     if (count <= capacity) return;
     capacity = Math.max(16, 2 ** Math.ceil(Math.log2(count)));
-    for (const mesh of [bodyMesh, bellyMesh, neckMesh]) {
+    for (const mesh of [bodyMesh, bellyMesh, neckMesh, bandMesh]) {
       if (!mesh) continue;
       group.remove(mesh);
       mesh.dispose();
@@ -75,10 +76,12 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, pale
     bodyMesh = new THREE.InstancedMesh(capsule, bodyMaterial, capacity);
     bellyMesh = new THREE.InstancedMesh(sphere, cream, capacity);
     neckMesh = new THREE.InstancedMesh(sphere, skin, capacity * 3);
+    bandMesh = new THREE.InstancedMesh(bandGeometry, cream, capacity);
     bodyMesh.name = 'snake-body';
     bellyMesh.name = 'snake-belly';
     neckMesh.name = 'snake-joints';
-    for (const mesh of [bodyMesh, bellyMesh, neckMesh]) {
+    bandMesh.name = 'snake-segment-bands';
+    for (const mesh of [bodyMesh, bellyMesh, neckMesh, bandMesh]) {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.frustumCulled = false;
@@ -151,7 +154,7 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, pale
       lastScale = state.scale;
       startedAt = clock;
       duration = state.continuous ? 0 : Math.min(110, state.speed * 0.7);
-      ensureCapacity(state.snake.length);
+      ensureCapacity(Math.max(state.snake.length, state.segmentJoints?.length || 0));
     }
     const progress = state.continuous || reducedMotion || !state.running ? 1 : Math.min(1, (clock - startedAt) / Math.max(duration, 1));
     const t = progress * progress * (3 - 2 * progress);
@@ -171,7 +174,9 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, pale
         rotation.slerpQuaternions(from.rotation, target.rotation, t);
       }
       const taper = i > 0 && i === targets.length - 1 ? 0.76 : 1;
-      const radius = target.radius * taper;
+      const phase = state.segmentLength ? (state.head.s - cells[i].s) / state.segmentLength : 0.5;
+      const section = i > 0 ? 0.9 + 0.1 * Math.sin(Math.PI * phase) ** 2 : 1;
+      const radius = target.radius * taper * section;
       normal.set(0, 1, 0).applyQuaternion(rotation);
       if (i > 0) {
         lastSample.copy(position);
@@ -225,6 +230,16 @@ function createClayActors({ THREE, parent, getState, frameAt, frameBetween, pale
     }
     bodyMesh.instanceMatrix.needsUpdate = bellyMesh.instanceMatrix.needsUpdate = neckMesh.instanceMatrix.needsUpdate = true;
     if (bodyMesh.instanceColor) bodyMesh.instanceColor.needsUpdate = true;
+
+    const bands = state.segmentJoints || [];
+    bandMesh.count = bands.length;
+    for (let i = 0; i < bands.length; i++) {
+      const frame = pose(frameAt(bands[i])), r = frame.radius * 0.94;
+      scale.set(r, r * 0.96, r);
+      matrix.compose(frame.position, frame.rotation, scale);
+      bandMesh.setMatrixAt(i, matrix);
+    }
+    bandMesh.instanceMatrix.needsUpdate = true;
 
     while (foodPool.length < state.foods.length) foodPool.push(makeFruit());
     for (let i = 0; i < foodPool.length; i++) {
