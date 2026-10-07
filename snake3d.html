@@ -356,6 +356,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
       <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
       <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
       <span><span class="dot" style="background:#2ecc71"></span><span id="speedUpLabel">Speed Up</span></span>
+      <span id="portalLegend" style="display:none"><span class="dot" style="border:2px solid #67eeff;border-radius:50%;box-sizing:border-box"></span><span id="portalLabel">Portal · switch sides</span></span>
     </div>
     <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
   </div>
@@ -420,6 +421,7 @@ const FOOD_LIFETIME = 220;
 const INITIAL_FOODS = 4;
 const MIN_FOODS = 3;
 const MAX_FOODS = 9;
+const PROJECTIVE_PORTALS = { interval: 5, chance: 0.4, lifetime: 60, maxCount: 2, initialCount: 1 };
 const BASE_R = 1.2;
 const BASE_R_TUBE = 0.5;
 const FOOD_DEF = {
@@ -447,6 +449,8 @@ const TEXT = {
     slow: 'Slow',
     shrink: 'Shrink',
     speedUp: 'Speed Up',
+    portal: 'Portal · switch sides',
+    teleported: 'Switched to the other side',
     tip: 'Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
     localMap: 'Chart',
     pi1Title: 'π1 Calculation',
@@ -511,6 +515,8 @@ const TEXT = {
     slow: '减速',
     shrink: '缩短',
     speedUp: '加速',
+    portal: '传送 · 通往另一侧',
+    teleported: '已传送至另一侧',
     tip: '方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角',
     localMap: '局部地图',
     pi1Title: 'π1 计算',
@@ -602,6 +608,8 @@ function applyStaticText() {
   setText('slowLabel', tr('slow'));
   setText('shrinkLabel', tr('shrink'));
   setText('speedUpLabel', tr('speedUp'));
+  setText('portalLabel', tr('portal'));
+  document.getElementById('portalLegend').style.display = MAP_TYPE === 'projective' ? '' : 'none';
   setText('tipText', tr('tip'));
   setText('mapTitle', tr('localMap'));
   setText('pi1Title', tr('pi1Title'));
@@ -642,9 +650,6 @@ function ensureSurfaceGeometry() {
     } else if (MAP_TYPE === 'genus2') {
       markMaterialFront = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTex[face.key], THREE.DoubleSide));
       markMaterialBack = null;
-    } else if (MAP_TYPE === 'projective') {
-      markMaterialFront = createMarkMaterial(markTexFront, THREE.DoubleSide);
-      markMaterialBack = null;
     } else {
       markMaterialFront = createMarkMaterial(markTexFront, THREE.FrontSide);
       markMaterialBack = createMarkMaterial(markTexBack, THREE.BackSide);
@@ -680,7 +685,7 @@ function ensureSurfaceGeometry() {
   torusMesh.position.set(0, 0, 0);
   surfaceGroup.add(torusMesh);
 
-  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') {
+  if (MAP_TYPE === 'genus2') {
     markMeshFront = new THREE.Mesh(geo, markMaterialFront);
     markMeshFront.renderOrder = 2;
     surfaceGroup.add(markMeshFront);
@@ -1952,8 +1957,37 @@ function drawTopologyCutMarks() {
   if (!topologyHintsVisible) return;
   drawTorusCutMarks(markCtxFront);
   drawProjectiveCutMarks(markCtxFront);
+  drawProjectiveCutMarks(markCtxBack);
   drawKleinCutMarks(markCtxFront);
   drawKleinCutMarks(markCtxBack);
+}
+
+function drawPortalMark(ctx, portal, cx, cy, px) {
+  const radius = px * 0.36;
+  const phase = portal.age * 1.8;
+  const remaining = Math.max(0, 1 - portal.age / PROJECTIVE_PORTALS.lifetime);
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.shadowColor = '#29dcff';
+  ctx.shadowBlur = px * 0.25;
+  ctx.strokeStyle = '#67eeff';
+  ctx.lineWidth = Math.max(2, px * 0.09);
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, phase, phase + Math.PI * 1.5);
+  ctx.stroke();
+  ctx.strokeStyle = '#efffff';
+  ctx.lineWidth = Math.max(1, px * 0.04);
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.69, -phase, -phase + Math.PI * 1.35);
+  ctx.stroke();
+  if (remaining > 0) {
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(103,238,255,0.7)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, px * 0.46, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function redrawTexture() {
@@ -1984,6 +2018,13 @@ function redrawTexture() {
 
   for (let i = snake.length - 1; i >= 0; i--) {
     drawSnakeMark(markContextFor(snake[i]), snake[i], i);
+  }
+
+  for (const portal of portals) {
+    const { x, y } = cellCenter(portal.gx, portal.gy);
+    for (const ctx of [markCtxFront, markCtxBack]) {
+      drawPortalMark(ctx, portal, x, y, textureCellPx());
+    }
   }
 
   gridTex.needsUpdate = true;
@@ -2386,16 +2427,18 @@ function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
     while (gx < 0 || gx >= GRID_SIZE) {
       gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
       gy = GRID_SIZE - 1 - gy;
+      nside *= -1;
       mirror *= -1;
       if (ndir) ndir.dy *= -1;
     }
     while (gy < 0 || gy >= GRID_SIZE) {
       gy += gy < 0 ? GRID_SIZE : -GRID_SIZE;
       gx = GRID_SIZE - 1 - gx;
+      nside *= -1;
       mirror *= -1;
       if (ndir) ndir.dx *= -1;
     }
-    return { gx, gy, dir: ndir, side: 1, mirror };
+    return { gx, gy, dir: ndir, side: nside, mirror };
   }
 
   if (MAP_TYPE === 'mobius') {
@@ -3142,7 +3185,7 @@ function updatePi1Panel() {
     setPi1Text('pi1Close', '-');
     return;
   }
-  const next = normalizeGridPosition(head.gx + dir.dx, head.gy + dir.dy, dir, head.side, head.face);
+  const next = nextSnakeStep(head, dir);
   const hitSelfIdx = next.blocked
     ? -1
     : snake.findIndex(s => sameSnakeCell(s, next.gx, next.gy, next.side ?? 1, next.face ?? null));
@@ -3214,8 +3257,9 @@ function resetSnake() {
     return;
   }
   const face = MAP_TYPE === 'sphere' ? 'F' : null;
+  const side = MAP_TYPE === 'projective' ? -1 : 1;
   snake = buildInitialSnake(
-    { gx: Math.floor(GRID_SIZE / 2), gy: Math.floor(GRID_SIZE / 2), side: 1, face },
+    { gx: Math.floor(GRID_SIZE / 2), gy: Math.floor(GRID_SIZE / 2), side, face },
     INITIAL_SNAKE_LENGTH,
   );
   direction = { dx: 1, dy: 0 };
@@ -3229,6 +3273,10 @@ function resetSnake() {
    FOOD
    =========================== */
 let foods = [];
+let portals = [];
+let nextPortalId = 1;
+let portalSpawnElapsed = 0;
+let portalLastUpdate = 0;
 
 /* ===========================
    GAME STATE
@@ -3267,6 +3315,7 @@ function sameSnakeCell(a, gx, gy, side, face) {
 
 function togglePause() {
   if (!running) return;
+  updateProjectivePortals();
   paused = !paused;
   updateUI();
 }
@@ -3327,6 +3376,59 @@ function isOccupied(gx, gy, side = 1, face = null) {
   return false;
 }
 
+function trySpawnPortal(preferred = null) {
+  if (MAP_TYPE !== 'projective' || portals.length >= PROJECTIVE_PORTALS.maxCount) return;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const gx = attempt === 0 && preferred ? preferred.gx : Math.floor(Math.random() * GRID_SIZE);
+    const gy = attempt === 0 && preferred ? preferred.gy : Math.floor(Math.random() * GRID_SIZE);
+    if ([...snake, ...foods, ...portals].some(p => p.gx === gx && p.gy === gy)) continue;
+    portals.push({ id: nextPortalId++, gx, gy, age: 0, heldActive: false });
+    return;
+  }
+}
+
+function refreshProjectivePortals() {
+  for (const portal of portals) {
+    // Keep the connection until the segment that entered it has left the tail.
+    portal.heldActive = snake.some(s => s.portalId === portal.id);
+  }
+  portals = portals.filter(p => p.age < PROJECTIVE_PORTALS.lifetime || p.heldActive);
+}
+
+function updateProjectivePortals(now = performance.now()) {
+  let elapsed = Math.max(0, (now - portalLastUpdate) / 1000);
+  portalLastUpdate = now;
+  if (MAP_TYPE !== 'projective' || !running || paused) return;
+  refreshProjectivePortals();
+  // Use active seconds, independently of the snake's tick speed or frame rate.
+  while (elapsed > 1e-9) {
+    const dt = Math.min(elapsed, PROJECTIVE_PORTALS.interval - portalSpawnElapsed);
+    for (const portal of portals) portal.age += dt;
+    refreshProjectivePortals();
+    portalSpawnElapsed += dt;
+    elapsed -= dt;
+    if (portalSpawnElapsed >= PROJECTIVE_PORTALS.interval - 1e-9) {
+      portalSpawnElapsed = 0;
+      if (portals.length < PROJECTIVE_PORTALS.maxCount && Math.random() < PROJECTIVE_PORTALS.chance) {
+        trySpawnPortal();
+      }
+    }
+  }
+}
+
+function nextSnakeStep(head, dir) {
+  const next = normalizeGridPosition(head.gx + dir.dx, head.gy + dir.dy, dir, head.side, head.face);
+  if (MAP_TYPE !== 'projective' || next.blocked) return next;
+  const portal = portals.find(p => p.gx === next.gx && p.gy === next.gy);
+  // Contact on the entry side happens before reaching the portal.
+  if (!portal || snake.some(s => sameSnakeCell(s, next.gx, next.gy, next.side, next.face))) return next;
+  next.side *= -1;
+  next.mirror *= -1;
+  next.portal = portal;
+  // Switching sides projects to a stationary point, so adds no pi1 generator.
+  return next;
+}
+
 function trySpawnFood() {
   if (foods.length >= MAX_FOODS) return;
   const type = pickFoodType();
@@ -3334,11 +3436,11 @@ function trySpawnFood() {
     const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
     const gx = Math.floor(Math.random() * gridSize);
     const gy = Math.floor(Math.random() * gridSize);
-    const side = ['mobius', 'klein'].includes(MAP_TYPE) && Math.random() < 0.5 ? -1 : 1;
+    const side = ['projective', 'mobius', 'klein'].includes(MAP_TYPE) && Math.random() < 0.5 ? -1 : 1;
     const face = MAP_TYPE === 'sphere'
       ? CUBE_FACE_KEYS[Math.floor(Math.random() * CUBE_FACE_KEYS.length)]
       : (MAP_TYPE === 'genus2' ? randomGenus2FaceKey() : null);
-    if (!isOccupied(gx, gy, side, face)) {
+    if (!isOccupied(gx, gy, side, face) && !portals.some(p => p.gx === gx && p.gy === gy)) {
       foods.push({ gx, gy, side, face, type, age: 0 });
       return;
     }
@@ -3389,6 +3491,7 @@ function winByLoop(info) {
 function gameTick() {
   if (!running || paused) return;
 
+  updateProjectivePortals();
   tickStartTime = performance.now();
   tickInterval = speed;
 
@@ -3407,7 +3510,7 @@ function gameTick() {
 
   const head = snake[0];
   const moveDir = { ...direction };
-  const next = normalizeGridPosition(head.gx + direction.dx, head.gy + direction.dy, direction, head.side, head.face);
+  const next = nextSnakeStep(head, direction);
   if (next.blocked) {
     die(tr('hitBoundary'));
     return;
@@ -3426,6 +3529,10 @@ function gameTick() {
     face: newFace,
     topo: advanceTopologyState(head.topo, head, moveDir),
   };
+  if (next.portal) {
+    newHead.portalId = next.portal.id;
+    addMsg(tr('teleported'), 'good');
+  }
   if (LOOP_WIN_MAPS.has(MAP_TYPE)) {
     pi1LastStep = describeTopologyMove(head, moveDir);
   }
@@ -3434,6 +3541,7 @@ function gameTick() {
   if (hitSelfIdx !== -1) {
     const closure = selfClosureInfo(newHead.topo, hitSelfIdx);
     snake = [newHead, ...snake.slice(0, hitSelfIdx)];
+    refreshProjectivePortals();
     if (closure?.nontrivial) {
       winByLoop(closure);
       updateUI();
@@ -3462,6 +3570,7 @@ function gameTick() {
     snake.pop();
   }
 
+  refreshProjectivePortals();
   updateUI();
 }
 
@@ -3572,6 +3681,10 @@ function init() {
   running = true;
   paused = false;
   foods = [];
+  portals = [];
+  nextPortalId = 1;
+  portalSpawnElapsed = 0;
+  portalLastUpdate = performance.now();
   spawnTimer = SPAWN_INTERVAL;
   clearMsgTimer();
   best = parseInt(localStorage.getItem(`snake3dBest_${MAP_TYPE}`) || '0');
@@ -3579,6 +3692,8 @@ function init() {
   resetSnake();
 
   for (let i = 0; i < INITIAL_FOODS; i++) trySpawnFood();
+  const ahead = normalizeGridPosition(snake[0].gx + 3, snake[0].gy, null, snake[0].side, snake[0].face);
+  for (let i = 0; i < PROJECTIVE_PORTALS.initialCount; i++) trySpawnPortal(ahead);
 
   setMsg('');
   updateUI();
@@ -3735,6 +3850,11 @@ function drawMiniMap() {
     }
   }
 
+  for (const portal of portals) {
+    const m = worldToChart(portal.gx, portal.gy, 1) || worldToChart(portal.gx, portal.gy, -1);
+    if (m) drawPortalMark(ctx, portal, m.cx, m.cy, MAP_PX);
+  }
+
   // Center cell highlight
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 2;
@@ -3762,6 +3882,7 @@ function drawMiniMap() {
 function render() {
   requestAnimationFrame(render);
 
+  updateProjectivePortals();
   redrawTexture();
   drawMiniMap();
   updatePi1Panel();

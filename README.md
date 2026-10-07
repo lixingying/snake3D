@@ -41,7 +41,7 @@ Mobile:
 - Sphere: form any closed loop.
 - Torus: form a nontrivial loop.
 - Genus 2: form a nontrivial loop.
-- Projective plane: form a nontrivial loop.
+- Projective plane: form a nontrivial loop with contact on the same local side. Enter a cyan portal to switch sides; the body follows. Portals leave the surface intact, and switching sides adds no generator to the loop calculation (`a² = 1`).
 - Mobius strip: form a nontrivial loop without crossing the boundary.
 - Klein bottle: form a nontrivial loop.
 
@@ -54,6 +54,7 @@ Useful constants are near the top of `snake3d.html`.
 - Mobile camera zoom: `MOBILE_CAMERA_DISTANCE_SCALE`. Smaller values zoom in more on mobile.
 - Food counts: `INITIAL_FOODS`, `MIN_FOODS`, `MAX_FOODS`.
 - Food weights and colors: `FOOD_DEF`.
+- Projective-plane portals: `PROJECTIVE_PORTALS`. Start with one; every 5 seconds of active play, a 40% chance to spawn another, with at most two present. Each lasts 60 seconds, or until the tail clears it if still in use. Pausing stops the timer.
 
 The index page previews can either use the built-in rotating 3D previews or custom images. To use a custom image, set `data-image` on a `.map-card` in `index.html`.
 
@@ -120,7 +121,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 球面：形成任意闭合环路。
 - 环面：形成非平凡环路。
 - 双孔曲面：形成非平凡环路。
-- 射影平面：形成非平凡环路。
+- 射影平面：在同一局部侧接上，形成非平凡环路。进入青色传送口可换到另一侧，蛇身依次跟随。传送口不挖除曲面，换侧不向环路计算中添加生成元（`a² = 1`）。
 - 莫比乌斯带：形成不跨边界的非平凡环路。
 - 克莱因瓶：形成非平凡环路。
 
@@ -133,6 +134,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 手机端相机距离：`MOBILE_CAMERA_DISTANCE_SCALE`。数值越小，手机端越放大。
 - 食物数量：`INITIAL_FOODS`、`MIN_FOODS`、`MAX_FOODS`。
 - 食物权重和颜色：`FOOD_DEF`。
+- 射影平面传送口：`PROJECTIVE_PORTALS`。开局一个；每游玩 5 秒，有 40% 概率生成一个，同时最多两个。持续 60 秒；若蛇身仍在通过，则保留到蛇尾通过。暂停时停止计时。
 
 首页预览可以使用内置的旋转 3D 预览，也可以换成自己的图片。要换图，在 `index.html` 的 `.map-card` 上填写 `data-image`。
 
