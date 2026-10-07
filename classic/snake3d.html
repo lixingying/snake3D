@@ -1,0 +1,3932 @@
+<!DOCTYPE html>
+<!--
+Snake on Surfaces
+Copyright 2026 Xingying Li
+Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake on Surfaces</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    overflow: hidden;
+    background: #07090f;
+    font-family: 'Courier New', monospace;
+    color: #eee;
+    user-select: none;
+  }
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 16px;
+  }
+  .top-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    align-self: center;
+  }
+  .top-bar {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+    background: rgba(9, 12, 20, 0.86);
+    padding: 8px 16px;
+    border-radius: 6px;
+  }
+  .top-bar span { font-weight: bold; }
+  .goal-line {
+    max-width: min(760px, calc(100vw - 32px));
+    text-align: center;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    background: rgba(9, 12, 20, 0.9);
+    border: 1px solid rgba(93,173,226,0.55);
+    border-radius: 6px;
+    padding: 7px 14px;
+    color: #dbefff;
+  }
+  .goal-line span { font-weight: bold; }
+  #goalText { color: #5dade2; }
+  .msg-area {
+    text-align: center;
+    font-size: 0.9rem;
+    height: 20px;
+    line-height: 20px;
+    pointer-events: none;
+  }
+  .msg-area.good { color: #4ecca3; }
+  .msg-area.warn { color: #f0a500; }
+  .msg-area.dead { color: #e84545; }
+  .bottom-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+  }
+  button {
+    padding: 6px 18px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #4ecca3;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  button:hover { background: #3db88f; }
+  button.btn2 { background: #5dade2; }
+  button.btn2:hover { background: #4a9ccf; }
+  .legend {
+    display: flex;
+    gap: 10px;
+    font-size: 0.72rem;
+    color: #aaa;
+    flex-wrap: wrap;
+    justify-content: center;
+    line-height: 1.5;
+    background: rgba(9, 12, 20, 0.78);
+    padding: 6px 12px;
+    border-radius: 4px;
+  }
+  .legend .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 2px;
+    vertical-align: middle;
+  }
+  .legend .sepa { color: #444; margin: 0 2px; font-weight: bold; }
+  .tip {
+    font-size: 0.75rem;
+    color: #7f8da3;
+    text-align: center;
+  }
+  .pause-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: #fff;
+    pointer-events: none;
+  }
+  #map-panel {
+    position: fixed;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    background: rgba(9, 12, 20, 0.94);
+    border: 2px solid #4ecca3;
+    border-radius: 8px;
+    padding: 5px;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+  }
+  #mapCanvas { touch-action: none; display: block; }
+  #touch-control-zone {
+    display: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    pointer-events: none;
+    touch-action: none;
+  }
+  #map-panel .map-title {
+    text-align: center;
+    font-size: 0.68rem;
+    color: #4ecca3;
+    letter-spacing: 1px;
+    margin-top: 1px;
+  }
+  #pi1-panel {
+    position: fixed;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    width: 310px;
+    background: rgba(9, 12, 20, 0.94);
+    border: 2px solid #5dade2;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.68rem;
+    line-height: 1.45;
+    color: #d7e8f4;
+    pointer-events: none;
+  }
+  #pi1-panel .pi1-title {
+    color: #5dade2;
+    text-align: center;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  #pi1-panel .pi1-row {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 6px;
+    align-items: start;
+  }
+  #pi1-panel .pi1-key { color: #7f8da3; }
+  #pi1-panel .pi1-val {
+    color: #f5fbff;
+    overflow-wrap: anywhere;
+  }
+  #pi1-panel .pi1-warn { color: #f0a500; }
+  @media (max-width: 700px), (pointer: coarse) and (max-width: 980px) {
+    #canvas-container {
+      top: 64px;
+      right: 0;
+      bottom: 348px;
+      left: 0;
+    }
+    #overlay {
+      padding: calc(8px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom));
+    }
+    .top-bar {
+      gap: 12px;
+      font-size: 0.82rem;
+      padding: 6px 12px;
+    }
+    .goal-line {
+      max-width: calc(100vw - 20px);
+      font-size: 0.78rem;
+      padding: 6px 10px;
+    }
+    .bottom-bar {
+      gap: 6px;
+    }
+    .btn-row {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 7px;
+    }
+    button {
+      padding: 6px 12px;
+      font-size: 0.78rem;
+      letter-spacing: 0;
+    }
+    .legend {
+      max-width: calc(100vw - 20px);
+      gap: 8px;
+      font-size: 0.64rem;
+      padding: 5px 9px;
+    }
+    .tip {
+      display: none;
+    }
+    #map-panel {
+      left: 50%;
+      right: auto;
+      top: auto;
+      bottom: calc(84px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 4px;
+      z-index: 4;
+    }
+    #mapCanvas {
+      width: min(60vw, 232px);
+      height: min(60vw, 232px);
+    }
+    #touch-control-zone {
+      display: block;
+      pointer-events: auto;
+      bottom: calc(84px + env(safe-area-inset-bottom));
+      height: calc(min(60vw, 232px) + 26px);
+    }
+    #map-panel .map-title {
+      font-size: 0.62rem;
+    }
+    #pi1-panel {
+      left: 50%;
+      top: calc(82px + env(safe-area-inset-top));
+      transform: translateX(-50%);
+      width: min(330px, calc(100vw - 24px));
+      max-height: 35vh;
+      overflow: auto;
+      font-size: 0.62rem;
+    }
+  }
+  @media (max-width: 380px), (max-height: 720px) and (pointer: coarse) {
+    #canvas-container {
+      top: 62px;
+      bottom: 298px;
+    }
+    #map-panel {
+      bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+    #mapCanvas {
+      width: min(52vw, 190px);
+      height: min(52vw, 190px);
+    }
+    #touch-control-zone {
+      bottom: calc(76px + env(safe-area-inset-bottom));
+      height: calc(min(52vw, 190px) + 26px);
+    }
+    .legend {
+      font-size: 0.58rem;
+    }
+    button {
+      padding: 5px 10px;
+      font-size: 0.72rem;
+    }
+  }
+  @media (pointer: coarse) and (max-width: 980px) and (max-height: 520px) {
+    #canvas-container {
+      top: 58px;
+      bottom: 220px;
+    }
+    #map-panel {
+      bottom: calc(54px + env(safe-area-inset-bottom));
+    }
+    #mapCanvas {
+      width: min(38vh, 154px);
+      height: min(38vh, 154px);
+    }
+    #touch-control-zone {
+      bottom: calc(54px + env(safe-area-inset-bottom));
+      height: calc(min(38vh, 154px) + 26px);
+    }
+    .legend {
+      display: none;
+    }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="overlay">
+  <div class="top-panel">
+    <div class="top-bar">
+      <div><span id="scoreLabel">Score</span>: <span id="score" style="color:#f0a500">0</span></div>
+      <div><span id="bestLabel">Best</span>: <span id="best" style="color:#f0a500">0</span></div>
+    </div>
+    <div class="goal-line"><span id="goalLabel">Goal</span>: <span id="goalText"></span></div>
+  </div>
+  <div class="msg-area" id="msg"></div>
+  <div class="bottom-bar">
+    <div class="btn-row">
+      <button id="restart">Restart</button>
+      <button class="btn2" id="pauseBtn">Pause</button>
+      <button class="btn2" id="topologyHintsBtn">Hints</button>
+      <button class="btn2" id="resetCam">Reset Camera</button>
+    </div>
+    <div class="legend">
+      <span id="foodLabel" style="color:#5e5">Food:</span>
+      <span><span class="dot" style="background:#f39c12"></span><span id="growLabel">Grow</span></span>
+      <span><span class="dot" style="background:#3498db"></span><span id="slowLabel">Slow</span></span>
+      <span><span class="dot" style="background:#c0392b"></span><span id="shrinkLabel">Shrink</span></span>
+      <span><span class="dot" style="background:#2ecc71"></span><span id="speedUpLabel">Speed Up</span></span>
+      <span id="portalLegend" style="display:none"><span class="dot" style="border:2px solid #67eeff;border-radius:50%;box-sizing:border-box"></span><span id="portalLabel">Portal</span></span>
+    </div>
+    <div class="tip" id="tipText">Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera</div>
+  </div>
+</div>
+
+<div class="pause-overlay" id="pauseOverlay" style="display:none;">Paused</div>
+
+<div id="touch-control-zone" aria-hidden="true"></div>
+<div id="map-panel">
+  <canvas id="mapCanvas" width="252" height="252"></canvas>
+  <div class="map-title" id="mapTitle">Chart</div>
+</div>
+
+<div id="pi1-panel" style="display:none;">
+  <div class="pi1-title" id="pi1Title">π1 Calculation</div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1RelLabel">Relation</span><span class="pi1-val" id="pi1Rel">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1StepLabel">Last step</span><span class="pi1-val" id="pi1Step">-</span></div>
+  <div class="pi1-row"><span class="pi1-key">dx,dy</span><span class="pi1-val" id="pi1Move">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1CutLabel">cut/edge</span><span class="pi1-val" id="pi1Cut">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1DetLabel">Formula</span><span class="pi1-val" id="pi1Det">-</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1HeadLabel">Head word</span><span class="pi1-val" id="pi1Head">1</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1TailLabel">Tail word</span><span class="pi1-val" id="pi1Tail">1</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1BodyLabel">Body word</span><span class="pi1-val" id="pi1Body">1</span></div>
+  <div class="pi1-row"><span class="pi1-key" id="pi1CloseLabel">Closure</span><span class="pi1-val" id="pi1Close">-</span></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ===========================
+   CONSTANTS
+   =========================== */
+const urlParams = new URLSearchParams(location.search);
+const requestedMap = urlParams.get('map');
+function getDeviceDefaultLang() {
+  const langs = navigator.languages && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en'];
+
+  return langs.some(l => String(l).toLowerCase().startsWith('zh'))
+    ? 'zh'
+    : 'en';
+}
+
+const requestedLang =
+  urlParams.get('lang') ||
+  localStorage.getItem('snake3dLang') ||
+  getDeviceDefaultLang();
+
+const LANG = requestedLang === 'zh' ? 'zh' : 'en';
+
+localStorage.setItem('snake3dLang', LANG);
+document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+
+const MAP_TYPE = ['torus', 'sphere', 'genus2', 'projective', 'mobius', 'klein'].includes(requestedMap) ? requestedMap : 'torus';
+// Show the opposite local side as an outline without changing occupancy.
+const SHOW_REVERSE_SNAKE = true;
+const GRID_SIZE = MAP_TYPE === 'mobius' ? 14 : 20;
+const INITIAL_SNAKE_LENGTH = 3;
+const requestedSpeed = parseInt(urlParams.get('speed'), 10);
+const INITIAL_SPEED_MS = (requestedSpeed >= 40 && requestedSpeed <= 400) ? requestedSpeed : 150;
+const SPAWN_INTERVAL = 24;
+const FOOD_LIFETIME = 220;
+const INITIAL_FOODS = 4;
+const MIN_FOODS = 3;
+const MAX_FOODS = 9;
+const PROJECTIVE_PORTALS = { interval: 5, chance: 0.4, lifetime: 60, maxCount: 2, initialCount: 1 };
+const BASE_R = 1.2;
+const BASE_R_TUBE = 0.5;
+const FOOD_DEF = {
+  grow:    { color: 0xf39c12, weight: 52 },
+  slow:    { color: 0x3498db, weight: 12 },
+  shrink:  { color: 0xc0392b, weight: 24 },
+  speedUp: { color: 0x2ecc71, weight: 12 },
+};
+
+const TEXT = {
+  en: {
+    appTitle: 'Snake on Surfaces',
+    score: 'Score',
+    best: 'Best',
+    goal: 'Goal',
+    restart: 'Restart',
+    pause: 'Pause',
+    resume: 'Resume',
+    resetCamera: 'Reset Camera',
+    showHints: 'Hints',
+    hideHints: 'Hide Hints',
+    paused: 'Paused',
+    food: 'Food:',
+    grow: 'Grow',
+    slow: 'Slow',
+    shrink: 'Shrink',
+    speedUp: 'Speed Up',
+    portal: 'Portal',
+    teleported: 'Switched to the other side',
+    tip: 'Arrow keys / WASD · P / Space pause · Drag to rotate · Wheel zoom · R reset camera',
+    localMap: 'Chart',
+    pi1Title: 'π1 Calculation',
+    pi1Rel: 'Relation',
+    pi1Step: 'Last step',
+    pi1Cut: 'cut/edge',
+    pi1Det: 'Formula',
+    pi1Head: 'Head word',
+    pi1Tail: 'Tail word',
+    pi1Body: 'Body word',
+    pi1Close: 'Closure',
+    goalSphere: 'Ouroboros: any closed loop',
+    goalTorus: 'Ouroboros: nontrivial loop',
+    goalGenus2: 'Ouroboros: nontrivial loop',
+    goalProjective: 'Ouroboros: nontrivial loop',
+    goalMobius: 'Ouroboros: nontrivial loop without crossing the boundary',
+    goalKlein: 'Ouroboros: nontrivial loop',
+    goalDefault: 'Classic snake',
+    noBoundaryCross: 'no boundary crossing',
+    crossedBoundary: 'cross boundary x{n}',
+    noCut: 'no cut crossed',
+    noBoundaryCut: 'no boundary cut crossed',
+    boundary: 'boundary',
+    boundaryEdge: '{edge} edge',
+    bandBoundary: 'strip boundary',
+    closedLoopAny: 'any closed loop',
+    winClosed: 'Win! Ouroboros: closed loop',
+    winNontrivial: 'Win! Ouroboros: nontrivial loop {label}',
+    failBoundary: 'Closed loop crossed the boundary; no win',
+    failTrivial: 'Trivial loop; tail cut off',
+    notMoved: 'not moved yet',
+    nextNotClosed: 'next step not closed',
+    nontrivial: 'nontrivial',
+    trivial: 'trivial',
+    candidates: 'candidates {list}; use {letter}',
+    boundaryToA: 'boundary {edge} -> a',
+    crossedStripBoundary: 'crossed strip boundary',
+    noWinClosure: 'this closure does not count as a win',
+    glueEdgeU: 'u glued edge',
+    gameOver: 'Game over!',
+    hitBoundary: 'Hit the boundary!',
+    grew: 'Grew +1',
+    slowed: 'Slowed down',
+    shortened: 'Shortened',
+    spedUp: 'Sped up',
+    bodyCut: 'Body cut; kept {n} segments',
+  },
+  zh: {
+    appTitle: '蛇蛇教你学拓扑',
+    score: '分数',
+    best: '最高分',
+    goal: '目标',
+    restart: '重新开始',
+    pause: '暂停',
+    resume: '继续',
+    resetCamera: '重置视角',
+    showHints: '提示',
+    hideHints: '隐藏提示',
+    paused: '暂停中',
+    food: '食物:',
+    grow: '变长',
+    slow: '减速',
+    shrink: '缩短',
+    speedUp: '加速',
+    portal: '传送',
+    teleported: '已传送至另一侧',
+    tip: '方向键 / WASD · P / 空格暂停 · 鼠标拖拽旋转 · 滚轮缩放 · R 重置视角',
+    localMap: '局部地图',
+    pi1Title: 'π1 计算',
+    pi1Rel: '关系',
+    pi1Step: '上一步',
+    pi1Cut: 'cut/边',
+    pi1Det: '公式',
+    pi1Head: '头词',
+    pi1Tail: '尾词',
+    pi1Body: '体词',
+    pi1Close: '闭合',
+    goalSphere: '形成衔尾蛇：任意闭合环路',
+    goalTorus: '形成衔尾蛇：非平凡环路',
+    goalGenus2: '形成衔尾蛇：非平凡环路',
+    goalProjective: '形成衔尾蛇：非平凡环路',
+    goalMobius: '形成衔尾蛇：不跨边界的非平凡环路',
+    goalKlein: '形成衔尾蛇：非平凡环路',
+    goalDefault: '普通贪吃蛇',
+    noBoundaryCross: '不跨边界',
+    crossedBoundary: '跨边界×{n}',
+    noCut: '未穿过 cut',
+    noBoundaryCut: '未穿过边界 cut',
+    boundary: '边界',
+    boundaryEdge: '{edge} 边',
+    bandBoundary: '边界',
+    closedLoopAny: '任意闭合环路',
+    winClosed: '胜利！形成衔尾蛇：闭合环路',
+    winNontrivial: '胜利！形成衔尾蛇：非平凡回路 {label}',
+    failBoundary: '闭合环路跨过边界，不计胜利',
+    failTrivial: '平凡闭合，尾部被切掉',
+    notMoved: '尚未移动',
+    nextNotClosed: '下一步未闭合',
+    nontrivial: '非平凡',
+    trivial: '平凡',
+    candidates: '候选 {list}；采用 {letter}',
+    boundaryToA: '边界 {edge} -> a',
+    crossedStripBoundary: '跨过带边界',
+    noWinClosure: '该闭合不计胜利',
+    glueEdgeU: 'u 粘边',
+    gameOver: '游戏结束！',
+    hitBoundary: '撞到边界！',
+    grew: '变长 +1',
+    slowed: '减速！',
+    shortened: '身体缩短！',
+    spedUp: '加速！',
+    bodyCut: '撞断身体！保留前 {n} 节',
+  },
+};
+
+function tr(key, vars = {}) {
+  const table = TEXT[LANG] || TEXT.en;
+  const value = table[key] ?? TEXT.en[key] ?? key;
+  return value.replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? '');
+}
+
+const LOOP_WIN_MAPS = new Set(['sphere', 'torus', 'genus2', 'projective', 'mobius', 'klein']);
+const PI1_PANEL_MAPS = new Set(['torus', 'genus2', 'projective', 'mobius', 'klein']);
+const TORUS_CUT_X = GRID_SIZE / 2;
+const TORUS_CUT_Y = GRID_SIZE / 2;
+const KLEIN_CUT_A_X = GRID_SIZE / 2;
+const KLEIN_CUT_B_Y = GRID_SIZE / 4;
+const CUT_COLORS = {
+  a: '#ff5c8a',
+  b: '#48d9ff',
+  c: '#7cff6b',
+  d: '#ffd166',
+};
+// Boundary word around the genus-2 basepoint: left overlap a,c,A; right overlap b,d,B.
+const GENUS2_RELATOR = ['a', 'c', 'A', 'C', 'b', 'd', 'B', 'D'];
+const PROJECTIVE_RELATOR = ['a', 'a'];
+const KLEIN_RELATOR = ['a', 'b', 'A', 'b'];
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function applyStaticText() {
+  document.title = tr('appTitle');
+  setText('scoreLabel', tr('score'));
+  setText('bestLabel', tr('best'));
+  setText('goalLabel', tr('goal'));
+  setText('restart', tr('restart'));
+  setText('resetCam', tr('resetCamera'));
+  setText('topologyHintsBtn', topologyHintsVisible ? tr('hideHints') : tr('showHints'));
+  setText('pauseOverlay', tr('paused'));
+  setText('foodLabel', tr('food'));
+  setText('growLabel', tr('grow'));
+  setText('slowLabel', tr('slow'));
+  setText('shrinkLabel', tr('shrink'));
+  setText('speedUpLabel', tr('speedUp'));
+  setText('portalLabel', tr('portal'));
+  document.getElementById('portalLegend').style.display = MAP_TYPE === 'projective' ? '' : 'none';
+  setText('tipText', tr('tip'));
+  setText('mapTitle', tr('localMap'));
+  setText('pi1Title', tr('pi1Title'));
+  setText('pi1RelLabel', tr('pi1Rel'));
+  setText('pi1StepLabel', tr('pi1Step'));
+  setText('pi1CutLabel', tr('pi1Cut'));
+  setText('pi1DetLabel', tr('pi1Det'));
+  setText('pi1HeadLabel', tr('pi1Head'));
+  setText('pi1TailLabel', tr('pi1Tail'));
+  setText('pi1BodyLabel', tr('pi1Body'));
+  setText('pi1CloseLabel', tr('pi1Close'));
+}
+
+/* ===========================
+   TORUS MESH
+   =========================== */
+let torusMesh = null;
+let torusMaterial = null;
+let markMeshFront = null;
+let markMeshBack = null;
+let markMaterialFront = null;
+let markMaterialBack = null;
+let cutOverlayGroup = null;
+
+function ensureSurfaceGeometry() {
+  if (!torusMaterial) {
+    torusMaterial = new THREE.MeshStandardMaterial({
+      map: gridTex,
+      roughness: 0.55,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+    });
+  }
+  if (!markMaterialFront) {
+    if (MAP_TYPE === 'sphere') {
+      markMaterialFront = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexFront[faceKey], THREE.FrontSide));
+      markMaterialBack = CUBE_FACE_KEYS.map(faceKey => createMarkMaterial(sphereMarkTexBack[faceKey], THREE.BackSide));
+    } else if (MAP_TYPE === 'genus2') {
+      markMaterialFront = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTex[face.key], THREE.FrontSide));
+      markMaterialBack = getGenus2Topology().faces.map(face => createMarkMaterial(genus2MarkTexBack[face.key], THREE.BackSide));
+    } else {
+      markMaterialFront = createMarkMaterial(markTexFront, THREE.FrontSide);
+      markMaterialBack = createMarkMaterial(markTexBack, THREE.BackSide);
+    }
+  }
+  if (torusMesh) {
+    torusMesh.geometry.dispose();
+    surfaceGroup.remove(torusMesh);
+  }
+  if (markMeshFront) surfaceGroup.remove(markMeshFront);
+  if (markMeshBack) surfaceGroup.remove(markMeshBack);
+  if (cutOverlayGroup) {
+    disposeObject3D(cutOverlayGroup);
+    surfaceGroup.remove(cutOverlayGroup);
+    cutOverlayGroup = null;
+  }
+  const R = getR(), r = getr();
+  let geo;
+  if (MAP_TYPE === 'sphere') {
+    geo = createCubeSphereGeometry();
+  } else if (MAP_TYPE === 'genus2') {
+    geo = createGenus2Geometry();
+  } else if (MAP_TYPE === 'projective') {
+    geo = createProjectiveGeometry();
+  } else if (MAP_TYPE === 'mobius') {
+    geo = createMobiusGeometry();
+  } else if (MAP_TYPE === 'klein') {
+    geo = createKleinGeometry();
+  } else {
+    geo = new THREE.TorusGeometry(R, r, 64, 32);
+  }
+  torusMesh = new THREE.Mesh(geo, torusMaterial);
+  torusMesh.position.set(0, 0, 0);
+  surfaceGroup.add(torusMesh);
+
+  markMeshFront = new THREE.Mesh(geo, markMaterialFront);
+  markMeshBack = new THREE.Mesh(geo, markMaterialBack);
+  markMeshFront.renderOrder = 2;
+  markMeshBack.renderOrder = 2;
+  surfaceGroup.add(markMeshFront);
+  surfaceGroup.add(markMeshBack);
+
+  cutOverlayGroup = createCutOverlayGroup();
+  if (cutOverlayGroup) {
+    cutOverlayGroup.visible = topologyHintsVisible;
+    surfaceGroup.add(cutOverlayGroup);
+  }
+}
+
+function getR() { return BASE_R * fieldScale; }
+function getr() { return BASE_R_TUBE * fieldScale; }
+
+const CUBE_FACE_KEYS = ['F', 'R', 'B', 'L', 'U', 'D'];
+const CUBE_FACES = {
+  F: { n: new THREE.Vector3(0, 0, 1),  r: new THREE.Vector3(1, 0, 0),  d: new THREE.Vector3(0, -1, 0) },
+  R: { n: new THREE.Vector3(1, 0, 0),  r: new THREE.Vector3(0, 0, -1), d: new THREE.Vector3(0, -1, 0) },
+  B: { n: new THREE.Vector3(0, 0, -1), r: new THREE.Vector3(-1, 0, 0), d: new THREE.Vector3(0, -1, 0) },
+  L: { n: new THREE.Vector3(-1, 0, 0), r: new THREE.Vector3(0, 0, 1),  d: new THREE.Vector3(0, -1, 0) },
+  U: { n: new THREE.Vector3(0, 1, 0),  r: new THREE.Vector3(1, 0, 0),  d: new THREE.Vector3(0, 0, 1) },
+  D: { n: new THREE.Vector3(0, -1, 0), r: new THREE.Vector3(1, 0, 0),  d: new THREE.Vector3(0, 0, -1) },
+};
+const CUBE_TRANSITIONS = {
+  F: {
+    L: (x, y) => ({ face: 'L', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    R: (x, y) => ({ face: 'R', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
+    U: (x, y) => ({ face: 'U', gx: x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    D: (x, y) => ({ face: 'D', gx: x, gy: 0, dir: { dx: 0, dy: 1 } }),
+  },
+  R: {
+    L: (x, y) => ({ face: 'F', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    R: (x, y) => ({ face: 'B', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
+    U: (x, y) => ({ face: 'U', gx: GRID_SIZE - 1, gy: GRID_SIZE - 1 - x, dir: { dx: -1, dy: 0 } }),
+    D: (x, y) => ({ face: 'D', gx: GRID_SIZE - 1, gy: x, dir: { dx: -1, dy: 0 } }),
+  },
+  B: {
+    L: (x, y) => ({ face: 'R', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    R: (x, y) => ({ face: 'L', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
+    U: (x, y) => ({ face: 'U', gx: GRID_SIZE - 1 - x, gy: 0, dir: { dx: 0, dy: 1 } }),
+    D: (x, y) => ({ face: 'D', gx: GRID_SIZE - 1 - x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+  },
+  L: {
+    L: (x, y) => ({ face: 'B', gx: GRID_SIZE - 1, gy: y, dir: { dx: -1, dy: 0 } }),
+    R: (x, y) => ({ face: 'F', gx: 0, gy: y, dir: { dx: 1, dy: 0 } }),
+    U: (x, y) => ({ face: 'U', gx: 0, gy: x, dir: { dx: 1, dy: 0 } }),
+    D: (x, y) => ({ face: 'D', gx: 0, gy: GRID_SIZE - 1 - x, dir: { dx: 1, dy: 0 } }),
+  },
+  U: {
+    L: (x, y) => ({ face: 'L', gx: y, gy: 0, dir: { dx: 0, dy: 1 } }),
+    R: (x, y) => ({ face: 'R', gx: GRID_SIZE - 1 - y, gy: 0, dir: { dx: 0, dy: 1 } }),
+    U: (x, y) => ({ face: 'B', gx: GRID_SIZE - 1 - x, gy: 0, dir: { dx: 0, dy: 1 } }),
+    D: (x, y) => ({ face: 'F', gx: x, gy: 0, dir: { dx: 0, dy: 1 } }),
+  },
+  D: {
+    L: (x, y) => ({ face: 'L', gx: GRID_SIZE - 1 - y, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    R: (x, y) => ({ face: 'R', gx: y, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    U: (x, y) => ({ face: 'F', gx: x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+    D: (x, y) => ({ face: 'B', gx: GRID_SIZE - 1 - x, gy: GRID_SIZE - 1, dir: { dx: 0, dy: -1 } }),
+  },
+};
+
+function cubeVector(faceKey, u01, v01) {
+  const face = CUBE_FACES[faceKey || 'F'];
+  return face.n.clone()
+    .add(face.r.clone().multiplyScalar(u01 * 2 - 1))
+    .add(face.d.clone().multiplyScalar(v01 * 2 - 1));
+}
+
+function cubeCellVector(faceKey, gx, gy) {
+  return cubeVector(faceKey, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
+}
+
+function cubeSpherePoint(faceKey, u01, v01) {
+  return cubeVector(faceKey, u01, v01).normalize().multiplyScalar(getR());
+}
+
+function cubeFaceFromNormal(normal) {
+  let bestFace = 'F';
+  let bestDot = -Infinity;
+  for (const [faceKey, face] of Object.entries(CUBE_FACES)) {
+    const score = face.n.dot(normal);
+    if (score > bestDot) {
+      bestDot = score;
+      bestFace = faceKey;
+    }
+  }
+  return bestFace;
+}
+
+function createCubeSphereGeometry() {
+  const segments = 32;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  const groups = [];
+  const row = segments + 1;
+
+  for (const [faceIndex, faceKey] of CUBE_FACE_KEYS.entries()) {
+    const offset = positions.length / 3;
+    const face = CUBE_FACES[faceKey];
+    const groupStart = indices.length;
+    for (let y = 0; y <= segments; y++) {
+      const v = y / segments;
+      for (let x = 0; x <= segments; x++) {
+        const u = x / segments;
+        const p = cubeSpherePoint(faceKey, u, v);
+        positions.push(p.x, p.y, p.z);
+        uvs.push(u, v);
+      }
+    }
+    for (let y = 0; y < segments; y++) {
+      for (let x = 0; x < segments; x++) {
+        const a = offset + y * row + x;
+        const b = offset + y * row + x + 1;
+        const c = offset + (y + 1) * row + x;
+        const d = offset + (y + 1) * row + x + 1;
+        const winding = face.r.clone().cross(face.d).dot(face.n);
+        if (winding > 0) indices.push(a, b, c, b, d, c);
+        else indices.push(a, c, b, b, c, d);
+      }
+    }
+    groups.push({ start: groupStart, count: indices.length - groupStart, materialIndex: faceIndex });
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  for (const group of groups) geo.addGroup(group.start, group.count, group.materialIndex);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+const GENUS2_CENTER_OFFSET = 0.58;
+const GENUS2_RING_R = 0.58;
+const GENUS2_TUBE_R = 0.27;
+const GENUS2_SMOOTH = 0.18;
+const GENUS2_PATCH_CELLS = 6;
+const GENUS2_PATCH_RENDER_SEGMENTS = GENUS2_PATCH_CELLS;
+const GENUS2_POLYCUBE_SCALE = { x: 0.58, y: 0.55, z: 0.54 };
+const GENUS2_BASE_FACE = 'G2_0_0_0_PZ';
+
+function smoothMin(a, b, k) {
+  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k));
+  return b * (1 - h) + a * h - k * h * (1 - h);
+}
+
+function genus2TorusDistance(p, cx) {
+  const R = GENUS2_RING_R * fieldScale;
+  const r = GENUS2_TUBE_R * fieldScale;
+  const radial = Math.hypot(p.x - cx, p.y) - R;
+  return Math.hypot(radial, p.z) - r;
+}
+
+function genus2Field(x, y, z) {
+  const offset = GENUS2_CENTER_OFFSET * fieldScale;
+  const p = { x, y, z };
+  const left = genus2TorusDistance(p, -offset);
+  const right = genus2TorusDistance(p, offset);
+  return smoothMin(left, right, GENUS2_SMOOTH * fieldScale);
+}
+
+function estimateGenus2Normal(x, y, z) {
+  const e = 0.008 * fieldScale;
+  return new THREE.Vector3(
+    genus2Field(x + e, y, z) - genus2Field(x - e, y, z),
+    genus2Field(x, y + e, z) - genus2Field(x, y - e, z),
+    genus2Field(x, y, z + e) - genus2Field(x, y, z - e),
+  ).normalize();
+}
+
+const GENUS2_FACE_DIRECTIONS = [
+  { key: 'PX', n: [ 1,  0,  0], r: [ 0,  1,  0], d: [ 0,  0, -1] },
+  { key: 'NX', n: [-1,  0,  0], r: [ 0, -1,  0], d: [ 0,  0, -1] },
+  { key: 'PY', n: [ 0,  1,  0], r: [-1,  0,  0], d: [ 0,  0, -1] },
+  { key: 'NY', n: [ 0, -1,  0], r: [ 1,  0,  0], d: [ 0,  0, -1] },
+  { key: 'PZ', n: [ 0,  0,  1], r: [ 1,  0,  0], d: [ 0, -1,  0] },
+  { key: 'NZ', n: [ 0,  0, -1], r: [ 1,  0,  0], d: [ 0,  1,  0] },
+];
+const GENUS2_EDGE_KEYS = ['L', 'R', 'U', 'D'];
+let genus2TopologyCache = null;
+
+function vec3Key(x, y, z) {
+  return `${x},${y},${z}`;
+}
+
+function vAdd(a, b) {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function vSub(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vScale(a, s) {
+  return [a[0] * s, a[1] * s, a[2] * s];
+}
+
+function vDot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function genus2VoxelPoint(face, u, v) {
+  return vAdd(
+    vAdd(face.c, vScale(face.n, 0.5)),
+    vAdd(vScale(face.r, u - 0.5), vScale(face.d, v - 0.5)),
+  );
+}
+
+function genus2EdgePoint(face, edge, t) {
+  if (edge === 'L') return genus2VoxelPoint(face, 0, t);
+  if (edge === 'R') return genus2VoxelPoint(face, 1, t);
+  if (edge === 'U') return genus2VoxelPoint(face, t, 0);
+  return genus2VoxelPoint(face, t, 1);
+}
+
+function genus2EdgeKey(a, b) {
+  const pa = a.map(v => Math.round(v * 2)).join(',');
+  const pb = b.map(v => Math.round(v * 2)).join(',');
+  return pa < pb ? `${pa}|${pb}` : `${pb}|${pa}`;
+}
+
+function buildGenus2Topology() {
+  const voxels = [];
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -2; x <= 2; x++) {
+      if ((x === -1 || x === 1) && y === 0) continue;
+      voxels.push({ x, y, z: 0 });
+    }
+  }
+
+  const solid = new Set(voxels.map(v => vec3Key(v.x, v.y, v.z)));
+  const faces = [];
+  const faceMap = new Map();
+
+  for (const voxel of voxels) {
+    for (const dir of GENUS2_FACE_DIRECTIONS) {
+      const nx = voxel.x + dir.n[0];
+      const ny = voxel.y + dir.n[1];
+      const nz = voxel.z + dir.n[2];
+      if (solid.has(vec3Key(nx, ny, nz))) continue;
+      const face = {
+        key: `G2_${voxel.x}_${voxel.y}_${voxel.z}_${dir.key}`,
+        c: [voxel.x, voxel.y, voxel.z],
+        n: dir.n,
+        r: dir.r,
+        d: dir.d,
+        transitions: {},
+      };
+      faces.push(face);
+      faceMap.set(face.key, face);
+    }
+  }
+
+  const edgeMap = new Map();
+  for (const face of faces) {
+    for (const edge of GENUS2_EDGE_KEYS) {
+      const key = genus2EdgeKey(genus2EdgePoint(face, edge, 0), genus2EdgePoint(face, edge, 1));
+      if (!edgeMap.has(key)) edgeMap.set(key, []);
+      edgeMap.get(key).push({ face, edge });
+    }
+  }
+
+  for (const records of edgeMap.values()) {
+    if (records.length !== 2) continue;
+    const [a, b] = records;
+    a.face.transitions[a.edge] = { face: b.face.key, edge: b.edge };
+    b.face.transitions[b.edge] = { face: a.face.key, edge: a.edge };
+  }
+
+  const startFace = faces.find(face =>
+    face.c[0] === -2 && face.c[1] === -1 && face.n[2] === 1
+  ) || faces[0];
+  return { faces, faceMap, startFaceKey: startFace.key };
+}
+
+function getGenus2Topology() {
+  if (!genus2TopologyCache) genus2TopologyCache = buildGenus2Topology();
+  return genus2TopologyCache;
+}
+
+function genus2StartFaceKey() {
+  return getGenus2Topology().startFaceKey;
+}
+
+function randomGenus2FaceKey() {
+  const faces = getGenus2Topology().faces;
+  return faces[Math.floor(Math.random() * faces.length)].key;
+}
+
+function genus2LocalUVFromVoxel(face, p) {
+  const center = vAdd(face.c, vScale(face.n, 0.5));
+  const delta = vSub(p, center);
+  return {
+    u: vDot(delta, face.r) + 0.5,
+    v: vDot(delta, face.d) + 0.5,
+  };
+}
+
+function genus2RawPoint(faceKey, u, v) {
+  const topology = getGenus2Topology();
+  const face = topology.faceMap.get(faceKey) || topology.faceMap.get(topology.startFaceKey);
+  const p = genus2VoxelPoint(face, u, v);
+  return new THREE.Vector3(
+    p[0] * GENUS2_POLYCUBE_SCALE.x * fieldScale,
+    p[1] * GENUS2_POLYCUBE_SCALE.y * fieldScale,
+    p[2] * GENUS2_POLYCUBE_SCALE.z * fieldScale,
+  );
+}
+
+function projectToGenus2Surface(point) {
+  const p = point.clone();
+  for (let i = 0; i < 9; i++) {
+    const value = genus2Field(p.x, p.y, p.z);
+    if (Math.abs(value) < 0.0008 * fieldScale) break;
+    const normal = estimateGenus2Normal(p.x, p.y, p.z);
+    p.addScaledVector(normal, -value);
+  }
+  return p;
+}
+
+function genus2SurfacePoint(faceKey, u, v, lift = 0) {
+  const p = projectToGenus2Surface(genus2RawPoint(faceKey, u, v));
+  if (lift !== 0) p.addScaledVector(estimateGenus2Normal(p.x, p.y, p.z), lift * fieldScale);
+  return p;
+}
+
+function genus2Point(gx, gy, faceKey = null) {
+  const face = faceKey || genus2StartFaceKey();
+  return genus2SurfacePoint(
+    face,
+    (gx + 0.5) / GENUS2_PATCH_CELLS,
+    (gy + 0.5) / GENUS2_PATCH_CELLS,
+  );
+}
+
+function genus2GridVertexKey(faceKey, ix, iy) {
+  const topology = getGenus2Topology();
+  const face = topology.faceMap.get(faceKey) || topology.faceMap.get(topology.startFaceKey);
+  const p = genus2VoxelPoint(face, ix / GENUS2_PATCH_CELLS, iy / GENUS2_PATCH_CELLS);
+  return p.map(v => Math.round(v * 2 * GENUS2_PATCH_CELLS)).join(',');
+}
+
+function genus2GridVertexPoint(faceKey, ix, iy, lift = 0) {
+  return genus2SurfacePoint(
+    faceKey,
+    ix / GENUS2_PATCH_CELLS,
+    iy / GENUS2_PATCH_CELLS,
+    lift,
+  );
+}
+
+function gridEdgeKey(a, b) {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function genus2GridEdgeKey(faceKey, gx, gy, edge) {
+  let a, b;
+  if (edge === 'L') {
+    a = genus2GridVertexKey(faceKey, gx, gy);
+    b = genus2GridVertexKey(faceKey, gx, gy + 1);
+  } else if (edge === 'R') {
+    a = genus2GridVertexKey(faceKey, gx + 1, gy);
+    b = genus2GridVertexKey(faceKey, gx + 1, gy + 1);
+  } else if (edge === 'U') {
+    a = genus2GridVertexKey(faceKey, gx, gy);
+    b = genus2GridVertexKey(faceKey, gx + 1, gy);
+  } else {
+    a = genus2GridVertexKey(faceKey, gx, gy + 1);
+    b = genus2GridVertexKey(faceKey, gx + 1, gy + 1);
+  }
+  return gridEdgeKey(a, b);
+}
+
+function addGenus2GraphVertex(vertices, key, point) {
+  if (!vertices.has(key)) {
+    vertices.set(key, { key, point, edges: [] });
+  }
+}
+
+function addGenus2GraphEdge(vertices, edges, a, b) {
+  const key = gridEdgeKey(a, b);
+  if (!edges.has(key)) {
+    edges.set(key, { key, a, b });
+    vertices.get(a).edges.push(key);
+    vertices.get(b).edges.push(key);
+  }
+}
+
+function buildGenus2GridGraph() {
+  const vertices = new Map();
+  const edges = new Map();
+  const topology = getGenus2Topology();
+  for (const face of topology.faces) {
+    for (let gy = 0; gy < GENUS2_PATCH_CELLS; gy++) {
+      for (let gx = 0; gx < GENUS2_PATCH_CELLS; gx++) {
+        const v00 = genus2GridVertexKey(face.key, gx, gy);
+        const v10 = genus2GridVertexKey(face.key, gx + 1, gy);
+        const v01 = genus2GridVertexKey(face.key, gx, gy + 1);
+        const v11 = genus2GridVertexKey(face.key, gx + 1, gy + 1);
+        addGenus2GraphVertex(vertices, v00, genus2GridVertexPoint(face.key, gx, gy, 0.04));
+        addGenus2GraphVertex(vertices, v10, genus2GridVertexPoint(face.key, gx + 1, gy, 0.04));
+        addGenus2GraphVertex(vertices, v01, genus2GridVertexPoint(face.key, gx, gy + 1, 0.04));
+        addGenus2GraphVertex(vertices, v11, genus2GridVertexPoint(face.key, gx + 1, gy + 1, 0.04));
+        addGenus2GraphEdge(vertices, edges, v00, v01);
+        addGenus2GraphEdge(vertices, edges, v10, v11);
+        addGenus2GraphEdge(vertices, edges, v00, v10);
+        addGenus2GraphEdge(vertices, edges, v01, v11);
+      }
+    }
+  }
+
+  const root = [...vertices.keys()].sort()[0];
+  const parent = new Map([[root, null]]);
+  const queue = [root];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const adjacent = vertices.get(current).edges.slice().sort();
+    for (const edgeKey of adjacent) {
+      const edge = edges.get(edgeKey);
+      const next = edge.a === current ? edge.b : edge.a;
+      if (parent.has(next)) continue;
+      parent.set(next, { vertex: current, edge: edgeKey });
+      queue.push(next);
+    }
+  }
+
+  return { vertices, edges, parent, root };
+}
+
+function genus2RootPath(parent, root, vertex) {
+  const path = [];
+  let current = vertex;
+  while (current !== null && current !== undefined) {
+    path.push(current);
+    if (current === root) break;
+    current = parent.get(current)?.vertex;
+  }
+  return path.reverse();
+}
+
+let genus2CutSchemaCache = null;
+function genus2CutWaypoint(face, ix, iy) {
+  return { face, ix, iy };
+}
+
+function genus2CutPathDefs() {
+  const n = GENUS2_PATCH_CELLS;
+  const h = Math.floor(n / 2);
+  const base = GENUS2_BASE_FACE;
+  return [
+    {
+      label: 'a',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, 0, h),
+        genus2CutWaypoint(base, 0, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', n, n),
+        genus2CutWaypoint('G2_-1_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_-2_0_0_PZ', n, 0),
+        genus2CutWaypoint('G2_-2_0_0_PZ', n, n),
+        genus2CutWaypoint('G2_-1_-1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-1_-1_0_PZ', n, 0),
+        genus2CutWaypoint(base, 0, n),
+        genus2CutWaypoint(base, 0, h),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+    {
+      label: 'b',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, n, h),
+        genus2CutWaypoint(base, n, 0),
+        genus2CutWaypoint('G2_1_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_1_1_0_PZ', n, n),
+        genus2CutWaypoint('G2_2_0_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_2_0_0_PZ', 0, n),
+        genus2CutWaypoint('G2_1_-1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_1_-1_0_PZ', 0, 0),
+        genus2CutWaypoint(base, n, n),
+        genus2CutWaypoint(base, n, h),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+    {
+      label: 'c',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, 0, h),
+        genus2CutWaypoint('G2_0_0_0_NX', h, 0),
+        genus2CutWaypoint('G2_0_0_0_NX', h, n),
+        genus2CutWaypoint('G2_0_0_0_NZ', 0, h),
+        genus2CutWaypoint('G2_0_0_0_NZ', 0, 0),
+        genus2CutWaypoint('G2_-1_-1_0_NZ', n, n),
+        genus2CutWaypoint('G2_-1_-1_0_NZ', 0, n),
+        genus2CutWaypoint('G2_-2_0_0_NZ', n, 0),
+        genus2CutWaypoint('G2_-2_0_0_NZ', n, h),
+        genus2CutWaypoint('G2_-2_0_0_NZ', 0, h),
+        genus2CutWaypoint('G2_-2_0_0_NX', h, n),
+        genus2CutWaypoint('G2_-2_0_0_NX', h, 0),
+        genus2CutWaypoint('G2_-2_0_0_PZ', 0, h),
+        genus2CutWaypoint('G2_-2_0_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-2_1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_-2_1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-2_1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_-1_1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_0_1_0_PZ', 0, 0),
+        genus2CutWaypoint('G2_0_1_0_PZ', h, 0),
+        genus2CutWaypoint('G2_0_1_0_PZ', h, n),
+        genus2CutWaypoint(base, h, 0),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+    {
+      label: 'd',
+      vertices: [
+        genus2CutWaypoint(base, h, h),
+        genus2CutWaypoint(base, n, h),
+        genus2CutWaypoint('G2_0_0_0_PX', h, 0),
+        genus2CutWaypoint('G2_0_0_0_PX', h, n),
+        genus2CutWaypoint('G2_0_0_0_NZ', n, h),
+        genus2CutWaypoint('G2_0_0_0_NZ', n, 0),
+        genus2CutWaypoint('G2_1_-1_0_NZ', 0, n),
+        genus2CutWaypoint('G2_1_-1_0_NZ', n, n),
+        genus2CutWaypoint('G2_2_0_0_NZ', 0, 0),
+        genus2CutWaypoint('G2_2_0_0_NZ', 0, h),
+        genus2CutWaypoint('G2_2_0_0_NZ', n, h),
+        genus2CutWaypoint('G2_2_0_0_PX', h, n),
+        genus2CutWaypoint('G2_2_0_0_PX', h, 0),
+        genus2CutWaypoint('G2_2_0_0_PZ', n, h),
+        genus2CutWaypoint('G2_2_0_0_PZ', n, n),
+        genus2CutWaypoint('G2_2_-1_0_PZ', n, 0),
+        genus2CutWaypoint('G2_2_-1_0_PZ', n, n),
+        genus2CutWaypoint('G2_2_-1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_1_-1_0_PZ', n, n),
+        genus2CutWaypoint('G2_1_-1_0_PZ', 0, n),
+        genus2CutWaypoint('G2_0_-1_0_PZ', n, n),
+        genus2CutWaypoint('G2_0_-1_0_PZ', h, n),
+        genus2CutWaypoint('G2_0_-1_0_PZ', h, 0),
+        genus2CutWaypoint(base, h, n),
+        genus2CutWaypoint(base, h, h),
+      ],
+    },
+  ];
+}
+
+function genus2WaypointWithKey(vertex) {
+  return {
+    ...vertex,
+    key: genus2GridVertexKey(vertex.face, vertex.ix, vertex.iy),
+  };
+}
+
+function pushGenus2CutPoint(points, point) {
+  const last = points[points.length - 1];
+  if (!last || last.key !== point.key || (point.face && last.face !== point.face)) {
+    points.push(point);
+  }
+}
+
+function appendGenus2CutLine(points, face, from, to) {
+  let ix = from.ix;
+  let iy = from.iy;
+  const sx = Math.sign(to.ix - from.ix);
+  const sy = Math.sign(to.iy - from.iy);
+  while (ix !== to.ix) {
+    ix += sx;
+    pushGenus2CutPoint(points, genus2WaypointWithKey({ face, ix, iy }));
+  }
+  while (iy !== to.iy) {
+    iy += sy;
+    pushGenus2CutPoint(points, genus2WaypointWithKey({ face, ix, iy }));
+  }
+}
+
+function genus2ShortestVertexPath(graph, startKey, endKey) {
+  const parent = new Map([[startKey, null]]);
+  const queue = [startKey];
+  while (queue.length > 0 && !parent.has(endKey)) {
+    const current = queue.shift();
+    for (const edgeKey of graph.vertices.get(current)?.edges || []) {
+      const edge = graph.edges.get(edgeKey);
+      const next = edge.a === current ? edge.b : edge.a;
+      if (parent.has(next)) continue;
+      parent.set(next, current);
+      queue.push(next);
+    }
+  }
+  if (!parent.has(endKey)) return [startKey, endKey];
+
+  const path = [];
+  let current = endKey;
+  while (current !== null) {
+    path.push(current);
+    current = parent.get(current);
+  }
+  return path.reverse();
+}
+
+function appendGenus2CutSegment(points, graph, fromVertex, toVertex) {
+  const from = genus2WaypointWithKey(fromVertex);
+  const to = genus2WaypointWithKey(toVertex);
+  pushGenus2CutPoint(points, from);
+  if (from.key === to.key) return;
+
+  if (from.face === to.face) {
+    appendGenus2CutLine(points, from.face, from, to);
+    return;
+  }
+
+  const path = genus2ShortestVertexPath(graph, from.key, to.key);
+  for (let i = 1; i < path.length; i++) {
+    pushGenus2CutPoint(points, { face: null, ix: null, iy: null, key: path[i] });
+  }
+}
+
+function buildGenus2CutPoints(def, graph) {
+  const points = [];
+  for (let i = 0; i < def.vertices.length - 1; i++) {
+    appendGenus2CutSegment(points, graph, def.vertices[i], def.vertices[i + 1]);
+  }
+  return points;
+}
+
+function buildGenus2CutEdges(def, points) {
+  const cuts = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (a.key === b.key) continue;
+    cuts.push({
+      label: def.label,
+      color: CUT_COLORS[def.label],
+      edgeKey: gridEdgeKey(a.key, b.key),
+      face: a.face === b.face ? a.face : null,
+      tx: a.face === b.face ? b.ix - a.ix : 0,
+      ty: a.face === b.face ? b.iy - a.iy : 0,
+    });
+  }
+  return cuts;
+}
+
+function getGenus2CutSchema() {
+  if (!genus2CutSchemaCache) {
+    const graph = buildGenus2GridGraph();
+    const cuts = [];
+    const loops = genus2CutPathDefs().map(def => {
+      const points = buildGenus2CutPoints(def, graph);
+      cuts.push(...buildGenus2CutEdges(def, points));
+      return {
+        label: def.label,
+        color: CUT_COLORS[def.label],
+        points: points
+          .filter((point, i) => i === 0 || point.key !== points[i - 1].key)
+          .map(point => graph.vertices.get(point.key).point),
+      };
+    });
+    const byEdgeKey = new Map();
+    for (const cut of cuts) {
+      if (!byEdgeKey.has(cut.edgeKey)) byEdgeKey.set(cut.edgeKey, []);
+      byEdgeKey.get(cut.edgeKey).push(cut);
+    }
+    genus2CutSchemaCache = {
+      cuts,
+      graph,
+      loops,
+      byEdgeKey,
+    };
+  }
+  return genus2CutSchemaCache;
+}
+
+function createGenus2Geometry() {
+  const positions = [];
+  const uvs = [];
+  const topology = getGenus2Topology();
+  const segments = GENUS2_PATCH_RENDER_SEGMENTS;
+
+  function addVertex(p, u, v) {
+    positions.push(p.x, p.y, p.z);
+    uvs.push(u, v);
+  }
+
+  function addTriangle(a, b, c, auv, buv, cuv) {
+    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3);
+    const outward = estimateGenus2Normal(center.x, center.y, center.z);
+    const winding = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
+    if (winding.dot(outward) < 0) {
+      addVertex(a, auv.u, auv.v);
+      addVertex(c, cuv.u, cuv.v);
+      addVertex(b, buv.u, buv.v);
+    } else {
+      addVertex(a, auv.u, auv.v);
+      addVertex(b, buv.u, buv.v);
+      addVertex(c, cuv.u, cuv.v);
+    }
+  }
+
+  for (const face of topology.faces) {
+    for (let y = 0; y < segments; y++) {
+      const v0 = y / segments;
+      const v1 = (y + 1) / segments;
+      for (let x = 0; x < segments; x++) {
+        const u0 = x / segments;
+        const u1 = (x + 1) / segments;
+        const p00 = genus2SurfacePoint(face.key, u0, v0);
+        const p10 = genus2SurfacePoint(face.key, u1, v0);
+        const p01 = genus2SurfacePoint(face.key, u0, v1);
+        const p11 = genus2SurfacePoint(face.key, u1, v1);
+        addTriangle(p00, p10, p01, { u: u0, v: v0 }, { u: u1, v: v0 }, { u: u0, v: v1 });
+        addTriangle(p10, p11, p01, { u: u1, v: v0 }, { u: u1, v: v1 }, { u: u0, v: v1 });
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  let groupStart = 0;
+  const verticesPerFace = GENUS2_PATCH_RENDER_SEGMENTS * GENUS2_PATCH_RENDER_SEGMENTS * 6;
+  for (let i = 0; i < topology.faces.length; i++) {
+    geo.addGroup(groupStart, verticesPerFace, i);
+    groupStart += verticesPerFace;
+  }
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function createParametricGridGeometry(uSegments, vSegments, pointFn) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  const row = vSegments + 1;
+
+  for (let i = 0; i <= uSegments; i++) {
+    const u = i / uSegments;
+    for (let j = 0; j <= vSegments; j++) {
+      const v = j / vSegments;
+      const p = pointFn(u, v);
+      positions.push(p.x, p.y, p.z);
+      uvs.push(u, v);
+    }
+  }
+
+  for (let i = 0; i < uSegments; i++) {
+    for (let j = 0; j < vSegments; j++) {
+      const a = i * row + j;
+      const b = (i + 1) * row + j;
+      const c = i * row + j + 1;
+      const d = (i + 1) * row + j + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function mobiusPointUV(u01, v01) {
+  const u = u01 * Math.PI * 2;
+  const width = 0.48 * fieldScale;
+  const R = 1.22 * fieldScale;
+  const t = (v01 - 0.5) * 2 * width;
+  const twist = u / 2;
+  const radial = R + t * Math.cos(twist);
+  return new THREE.Vector3(
+    radial * Math.cos(u),
+    t * Math.sin(twist),
+    radial * Math.sin(u),
+  );
+}
+
+function createMobiusGeometry() {
+  return createParametricGridGeometry(128, 20, mobiusPointUV);
+}
+
+function projectiveSquareToDisk(a, b) {
+  return {
+    x: a * Math.sqrt(Math.max(0, 1 - (b * b) / 2)),
+    y: b * Math.sqrt(Math.max(0, 1 - (a * a) / 2)),
+  };
+}
+
+function projectivePointUV(u01, v01) {
+  const a = u01 * 2 - 1;
+  const b = v01 * 2 - 1;
+  const disk = projectiveSquareToDisk(a, b);
+  const radius = Math.min(1, Math.hypot(disk.x, disk.y));
+  const theta = Math.atan2(disk.y, disk.x);
+  const v = radius * Math.PI / 2;
+  const x = Math.cos(theta) * Math.sin(2 * v);
+  const y = Math.sin(theta) * Math.sin(2 * v);
+  const z = Math.cos(v) ** 2 - Math.cos(theta) ** 2 * Math.sin(v) ** 2;
+  const s = 1.35 * fieldScale;
+  return new THREE.Vector3(
+    x * s,
+    z * s * 0.78,
+    y * s,
+  );
+}
+
+function createProjectiveGeometry() {
+  return createParametricGridGeometry(128, 128, projectivePointUV);
+}
+
+function kleinPointUV(u01, v01) {
+  const u = u01 * Math.PI * 2;
+  const v = v01 * Math.PI * 2;
+  const tube = 2 * (1 - Math.cos(u) / 2);
+  let x;
+  let z;
+  if (u < Math.PI) {
+    x = 3 * Math.cos(u) * (1 + Math.sin(u)) + tube * Math.cos(u) * Math.cos(v);
+    z = -8 * Math.sin(u) - tube * Math.sin(u) * Math.cos(v);
+  } else {
+    x = 3 * Math.cos(u) * (1 + Math.sin(u)) + tube * Math.cos(v + Math.PI);
+    z = -8 * Math.sin(u);
+  }
+  const y = -tube * Math.sin(v);
+  const s = 0.17 * fieldScale;
+  return new THREE.Vector3(
+    x * s,
+    -z * s * 0.78,
+    y * s,
+  );
+}
+
+function createKleinGeometry() {
+  return createParametricGridGeometry(128, 32, kleinPointUV);
+}
+
+/* ===========================
+   THREE.JS SETUP
+   =========================== */
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07090f);
+scene.fog = new THREE.Fog(0x07090f, 5.5, 13);
+const surfaceGroup = new THREE.Group();
+scene.add(surfaceGroup);
+
+const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 30);
+camera.position.set(3.5, 2.8, 5.5);
+camera.lookAt(0, 0, 0);
+const DEFAULT_CAMERA_POSITION = new THREE.Vector3(3.5, 2.8, 5.5);
+const GENUS2_CAMERA_POSITION = new THREE.Vector3(2.75, 2.2, 4.32);
+const MOBILE_CAMERA_DISTANCE_SCALE = 0.84;
+const MOBILE_VIEW_QUERY = window.matchMedia('(max-width: 700px), (pointer: coarse) and (max-width: 980px)');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+// Lights
+const ambient = new THREE.AmbientLight(0x8aa2c8, 1.15);
+scene.add(ambient);
+const key = new THREE.DirectionalLight(0xffffff, 2.5);
+key.position.set(5, 8, 5);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x7ee0c2, 1.45);
+rim.position.set(-3, -1, -3);
+scene.add(rim);
+
+const VIEW_MIN_DISTANCE = 2.5;
+const VIEW_MAX_DISTANCE = 8;
+let isSurfaceDragging = false;
+let lastPointer = { x: 0, y: 0 };
+const surfacePointers = new Map();
+let pinchStartDistance = 0;
+let pinchStartCameraDistance = 0;
+renderer.domElement.style.touchAction = 'none';
+
+window.addEventListener('resize', () => {
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth, container.clientHeight);
+});
+
+function pointerDistance(points) {
+  if (points.length < 2) return 0;
+  return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+}
+
+function clampViewDistance(distance) {
+  return Math.max(VIEW_MIN_DISTANCE, Math.min(VIEW_MAX_DISTANCE, distance));
+}
+
+function setCameraDistance(distance) {
+  camera.position.setLength(clampViewDistance(distance));
+  camera.lookAt(0, 0, 0);
+}
+
+function beginSurfacePinch() {
+  const points = [...surfacePointers.values()];
+  pinchStartDistance = pointerDistance(points);
+  pinchStartCameraDistance = camera.position.length();
+}
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault();
+  surfacePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  isSurfaceDragging = true;
+  lastPointer = { x: e.clientX, y: e.clientY };
+  renderer.domElement.setPointerCapture(e.pointerId);
+  if (surfacePointers.size >= 2) {
+    isSurfaceDragging = false;
+    beginSurfacePinch();
+  }
+}, { passive: false });
+
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!surfacePointers.has(e.pointerId)) return;
+  e.preventDefault();
+  surfacePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (surfacePointers.size >= 2) {
+    const distance = pointerDistance([...surfacePointers.values()]);
+    if (pinchStartDistance > 0 && distance > 0) {
+      setCameraDistance(pinchStartCameraDistance * (pinchStartDistance / distance));
+    }
+    return;
+  }
+  if (!isSurfaceDragging) return;
+  const dx = e.clientX - lastPointer.x;
+  const dy = e.clientY - lastPointer.y;
+  lastPointer = { x: e.clientX, y: e.clientY };
+  surfaceGroup.rotation.y += dx * 0.008;
+  surfaceGroup.rotation.x += dy * 0.008;
+}, { passive: false });
+
+function stopSurfaceDrag(e) {
+  if (e?.pointerId !== undefined) {
+    surfacePointers.delete(e.pointerId);
+  }
+  if (e?.pointerId !== undefined && renderer.domElement.hasPointerCapture(e.pointerId)) {
+    renderer.domElement.releasePointerCapture(e.pointerId);
+  }
+  if (surfacePointers.size === 0) {
+    isSurfaceDragging = false;
+    pinchStartDistance = 0;
+    pinchStartCameraDistance = 0;
+    return;
+  }
+  if (surfacePointers.size === 1) {
+    const remaining = [...surfacePointers.values()][0];
+    lastPointer = { ...remaining };
+    isSurfaceDragging = true;
+    pinchStartDistance = 0;
+    pinchStartCameraDistance = 0;
+    return;
+  }
+  beginSurfacePinch();
+}
+
+renderer.domElement.addEventListener('pointerup', stopSurfaceDrag);
+renderer.domElement.addEventListener('pointercancel', stopSurfaceDrag);
+renderer.domElement.addEventListener('wheel', e => {
+  e.preventDefault();
+  const distance = camera.position.length();
+  setCameraDistance(distance * Math.exp(e.deltaY * 0.001));
+}, { passive: false });
+
+/* ===========================
+   DYNAMIC SURFACE TEXTURE
+   =========================== */
+const TEX_SIZE = 512;
+const texCanvas = document.createElement('canvas');
+const texCtx = texCanvas.getContext('2d');
+const markCanvasFront = document.createElement('canvas');
+const markCanvasBack = document.createElement('canvas');
+const markCtxFront = markCanvasFront.getContext('2d');
+const markCtxBack = markCanvasBack.getContext('2d');
+texCanvas.width = TEX_SIZE;
+texCanvas.height = TEX_SIZE;
+markCanvasFront.width = markCanvasBack.width = TEX_SIZE;
+markCanvasFront.height = markCanvasBack.height = TEX_SIZE;
+const cellPx = TEX_SIZE / GRID_SIZE;
+
+const gridTex = new THREE.CanvasTexture(texCanvas);
+gridTex.wrapS = gridTex.wrapT = THREE.ClampToEdgeWrapping;
+gridTex.colorSpace = THREE.SRGBColorSpace;
+// Keep canvas row 0 aligned with each parametrized face's v=0 edge.
+gridTex.flipY = false;
+const markTexFront = new THREE.CanvasTexture(markCanvasFront);
+const markTexBack = new THREE.CanvasTexture(markCanvasBack);
+markTexFront.wrapS = markTexFront.wrapT = THREE.ClampToEdgeWrapping;
+markTexBack.wrapS = markTexBack.wrapT = THREE.ClampToEdgeWrapping;
+markTexFront.colorSpace = markTexBack.colorSpace = THREE.SRGBColorSpace;
+markTexFront.flipY = false;
+markTexBack.flipY = false;
+const SPHERE_FACE_TEX_SIZE = 256;
+const sphereMarkCtxFront = {};
+const sphereMarkCtxBack = {};
+const sphereMarkTexFront = {};
+const sphereMarkTexBack = {};
+const GENUS2_FACE_TEX_SIZE = 192;
+const genus2MarkCtx = {};
+const genus2MarkTex = {};
+const genus2MarkCtxBack = {};
+const genus2MarkTexBack = {};
+
+for (const faceKey of CUBE_FACE_KEYS) {
+  const frontCanvas = document.createElement('canvas');
+  const backCanvas = document.createElement('canvas');
+  frontCanvas.width = backCanvas.width = SPHERE_FACE_TEX_SIZE;
+  frontCanvas.height = backCanvas.height = SPHERE_FACE_TEX_SIZE;
+  sphereMarkCtxFront[faceKey] = frontCanvas.getContext('2d');
+  sphereMarkCtxBack[faceKey] = backCanvas.getContext('2d');
+  sphereMarkTexFront[faceKey] = new THREE.CanvasTexture(frontCanvas);
+  sphereMarkTexBack[faceKey] = new THREE.CanvasTexture(backCanvas);
+  sphereMarkTexFront[faceKey].wrapS = sphereMarkTexFront[faceKey].wrapT = THREE.ClampToEdgeWrapping;
+  sphereMarkTexBack[faceKey].wrapS = sphereMarkTexBack[faceKey].wrapT = THREE.ClampToEdgeWrapping;
+  sphereMarkTexFront[faceKey].colorSpace = sphereMarkTexBack[faceKey].colorSpace = THREE.SRGBColorSpace;
+  sphereMarkTexFront[faceKey].flipY = false;
+  sphereMarkTexBack[faceKey].flipY = false;
+}
+
+for (const face of getGenus2Topology().faces) {
+  const canvas = document.createElement('canvas');
+  const backCanvas = document.createElement('canvas');
+  canvas.width = canvas.height = backCanvas.width = backCanvas.height = GENUS2_FACE_TEX_SIZE;
+  genus2MarkCtx[face.key] = canvas.getContext('2d');
+  genus2MarkCtxBack[face.key] = backCanvas.getContext('2d');
+  genus2MarkTex[face.key] = new THREE.CanvasTexture(canvas);
+  genus2MarkTexBack[face.key] = new THREE.CanvasTexture(backCanvas);
+  genus2MarkTex[face.key].wrapS = genus2MarkTex[face.key].wrapT = THREE.ClampToEdgeWrapping;
+  genus2MarkTexBack[face.key].wrapS = genus2MarkTexBack[face.key].wrapT = THREE.ClampToEdgeWrapping;
+  genus2MarkTex[face.key].colorSpace = THREE.SRGBColorSpace;
+  genus2MarkTexBack[face.key].colorSpace = THREE.SRGBColorSpace;
+  genus2MarkTex[face.key].flipY = false;
+  genus2MarkTexBack[face.key].flipY = false;
+}
+
+function createMarkMaterial(map, side) {
+  return new THREE.MeshBasicMaterial({
+    map,
+    transparent: true,
+    alphaTest: 0.03,
+    side,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+}
+
+function textureCellPx() {
+  if (MAP_TYPE === 'sphere') return SPHERE_FACE_TEX_SIZE / GRID_SIZE;
+  if (MAP_TYPE === 'genus2') return GENUS2_FACE_TEX_SIZE / GENUS2_PATCH_CELLS;
+  return TEX_SIZE / GRID_SIZE;
+}
+
+function markContextFor(item, side = item.side) {
+  if (MAP_TYPE === 'sphere') {
+    return (side === -1 ? sphereMarkCtxBack : sphereMarkCtxFront)[item.face || 'F'];
+  }
+  if (MAP_TYPE === 'genus2') {
+    return (side === -1 ? genus2MarkCtxBack : genus2MarkCtx)[item.face || genus2StartFaceKey()];
+  }
+  return side === -1 ? markCtxBack : markCtxFront;
+}
+
+function cellCenter(gx, gy, face = 'F') {
+  const size = MAP_TYPE === 'sphere'
+    ? SPHERE_FACE_TEX_SIZE
+    : (MAP_TYPE === 'genus2' ? GENUS2_FACE_TEX_SIZE : TEX_SIZE);
+  const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+  const px = size / gridSize;
+  return {
+    x: (gx + 0.5) * px,
+    y: (gy + 0.5) * px,
+  };
+}
+
+function drawFoodMark(ctx, f) {
+  const { x: cx, y: cy } = cellCenter(f.gx, f.gy, f.face);
+  const px = textureCellPx();
+  const def = FOOD_DEF[f.type];
+  const ageLeft = 1 - f.age / FOOD_LIFETIME;
+  const time = performance.now() / 1000;
+  const pulse = 0.82 + 0.18 * Math.sin(time * 4 + f.gx * 2.5 + f.gy * 3.1);
+  const pad = Math.max(1.5, px * 0.10);
+  ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
+  ctx.globalAlpha = (0.65 + 0.35 * ageLeft) * pulse;
+  ctx.fillRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
+  ctx.globalAlpha = 0.36;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = Math.max(1, px * 0.05);
+  ctx.strokeRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
+  ctx.globalAlpha = 1;
+}
+
+function drawReverseSnakeMark(ctx, cx, cy, px, isHead) {
+  const pad = px * 0.13;
+  ctx.save();
+  ctx.strokeStyle = isHead ? '#e1d5ff' : '#bba6ef';
+  ctx.lineWidth = Math.max(1.5, px * 0.06);
+  ctx.setLineDash([px * 0.18, px * 0.12]);
+  ctx.strokeRect(cx - px / 2 + pad, cy - px / 2 + pad, px - pad * 2, px - pad * 2);
+  ctx.restore();
+}
+
+function drawSnakeMark(ctx, s, i) {
+  const center = cellCenter(s.gx, s.gy, s.face);
+  const px = textureCellPx();
+  const sx = center.x - px / 2;
+  const sy = center.y - px / 2;
+  const pad = 1;
+  if (i === 0) {
+    ctx.fillStyle = '#ffdd57';
+    ctx.fillRect(sx + pad, sy + pad, px - pad * 2, px - pad * 2);
+    const dir = direction;
+    const cx = center.x;
+    const cy = center.y;
+    const er = px * 0.10;
+    ctx.fillStyle = '#061018';
+    let ex1, ey1, ex2, ey2;
+    if (dir.dx === 1)      { ex1 = cx + px*0.18; ey1 = cy - px*0.18; ex2 = cx + px*0.18; ey2 = cy + px*0.18; }
+    else if (dir.dx === -1) { ex1 = cx - px*0.18; ey1 = cy - px*0.18; ex2 = cx - px*0.18; ey2 = cy + px*0.18; }
+    else if (dir.dy === -1) { ex1 = cx - px*0.18; ey1 = cy - px*0.18; ex2 = cx + px*0.18; ey2 = cy - px*0.18; }
+    else                   { ex1 = cx - px*0.18; ey1 = cy + px*0.18; ex2 = cx + px*0.18; ey2 = cy + px*0.18; }
+    ctx.beginPath(); ctx.arc(ex1, ey1, er, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex2, ey2, er, 0, Math.PI*2); ctx.fill();
+  } else {
+    const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
+    ctx.fillStyle = `rgba(255,140,66,${alpha.toFixed(2)})`;
+    ctx.fillRect(sx + pad, sy + pad, px - pad * 2, px - pad * 2);
+  }
+}
+
+function drawSurfaceGrid(ctx, size) {
+  if (MAP_TYPE === 'projective') {
+    ctx.strokeStyle = 'rgba(168,228,210,0.11)';
+    ctx.lineWidth = 1;
+    const px = size / GRID_SIZE;
+    for (let i = 1; i < GRID_SIZE; i++) {
+      const pos = i * px;
+      ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
+    }
+    return;
+  }
+  ctx.strokeStyle = 'rgba(168,228,210,0.26)';
+  ctx.lineWidth = 1;
+  const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+  const px = size / gridSize;
+  for (let i = 0; i <= gridSize; i++) {
+    const pos = i * px;
+    ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(size, pos); ctx.stroke();
+  }
+}
+
+function drawCutLabel(ctx, label, x, y, color, radius) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = 'rgba(6,16,24,0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#061018';
+  ctx.font = `${Math.max(9, Math.floor(radius * 1.25))}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + 0.5);
+  ctx.restore();
+}
+
+function drawTorusCutMarks(ctx) {
+  if (MAP_TYPE !== 'torus') return;
+  const size = TEX_SIZE;
+  const x = TORUS_CUT_X * cellPx;
+  const y = TORUS_CUT_Y * cellPx;
+
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 5;
+
+  ctx.strokeStyle = CUT_COLORS.a;
+  ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.stroke();
+  drawCutLabel(ctx, 'a', x, cellPx * 0.75, CUT_COLORS.a, cellPx * 0.38);
+
+  ctx.strokeStyle = CUT_COLORS.b;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.stroke();
+  drawCutLabel(ctx, 'b', cellPx * 0.75, y, CUT_COLORS.b, cellPx * 0.38);
+  ctx.restore();
+}
+
+function drawProjectiveCutMarks(ctx) {
+  if (MAP_TYPE !== 'projective') return;
+  const size = TEX_SIZE;
+  const px = TEX_SIZE / GRID_SIZE;
+  ctx.save();
+  ctx.globalAlpha = 0.96;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = CUT_COLORS.a;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, size - 6, size - 6);
+  drawCutLabel(ctx, 'a', size / 2, px * 0.55, CUT_COLORS.a, px * 0.34);
+  drawCutLabel(ctx, 'a', size / 2, size - px * 0.55, CUT_COLORS.a, px * 0.34);
+  drawCutLabel(ctx, 'a', px * 0.55, size / 2, CUT_COLORS.a, px * 0.34);
+  drawCutLabel(ctx, 'a', size - px * 0.55, size / 2, CUT_COLORS.a, px * 0.34);
+  ctx.restore();
+}
+
+function drawKleinCutMarks(ctx) {
+  if (MAP_TYPE !== 'klein') return;
+  const size = TEX_SIZE;
+  const px = TEX_SIZE / GRID_SIZE;
+  const x = KLEIN_CUT_A_X * px;
+  const y = KLEIN_CUT_B_Y * px;
+  ctx.save();
+  ctx.globalAlpha = 0.96;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 6;
+
+  ctx.strokeStyle = CUT_COLORS.a;
+  ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.stroke();
+  drawCutLabel(ctx, 'a', x, px * 0.75, CUT_COLORS.a, px * 0.34);
+
+  ctx.strokeStyle = CUT_COLORS.b;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.stroke();
+  drawCutLabel(ctx, 'b', px * 0.75, y, CUT_COLORS.b, px * 0.34);
+  ctx.restore();
+}
+
+function drawGenus2CutMark(ctx, cut) {
+  const px = GENUS2_FACE_TEX_SIZE / GENUS2_PATCH_CELLS;
+  let x1, y1, x2, y2;
+  if (cut.edge === 'L') {
+    x1 = x2 = cut.gx * px;
+    y1 = cut.gy * px;
+    y2 = (cut.gy + 1) * px;
+  } else if (cut.edge === 'R') {
+    x1 = x2 = (cut.gx + 1) * px;
+    y1 = cut.gy * px;
+    y2 = (cut.gy + 1) * px;
+  } else if (cut.edge === 'U') {
+    x1 = cut.gx * px;
+    x2 = (cut.gx + 1) * px;
+    y1 = y2 = cut.gy * px;
+  } else {
+    x1 = cut.gx * px;
+    x2 = (cut.gx + 1) * px;
+    y1 = y2 = (cut.gy + 1) * px;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = 0.98;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = cut.color;
+  ctx.lineWidth = 18;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  if (cut.showLabel) {
+    drawCutLabel(ctx, cut.label, (x1 + x2) / 2, (y1 + y2) / 2, cut.color, px * 0.24);
+  }
+  ctx.restore();
+}
+
+function drawTopologyCutMarks() {
+  if (!topologyHintsVisible) return;
+  drawTorusCutMarks(markCtxFront);
+  drawProjectiveCutMarks(markCtxFront);
+  drawProjectiveCutMarks(markCtxBack);
+  drawKleinCutMarks(markCtxFront);
+  drawKleinCutMarks(markCtxBack);
+}
+
+function drawPortalMark(ctx, portal, cx, cy, px) {
+  const radius = px * 0.36;
+  const phase = portal.age * 1.8;
+  const remaining = Math.max(0, 1 - portal.age / PROJECTIVE_PORTALS.lifetime);
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.shadowColor = '#29dcff';
+  ctx.shadowBlur = px * 0.25;
+  ctx.strokeStyle = '#67eeff';
+  ctx.lineWidth = Math.max(2, px * 0.09);
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, phase, phase + Math.PI * 1.5);
+  ctx.stroke();
+  ctx.strokeStyle = '#efffff';
+  ctx.lineWidth = Math.max(1, px * 0.04);
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.69, -phase, -phase + Math.PI * 1.35);
+  ctx.stroke();
+  if (remaining > 0) {
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(103,238,255,0.7)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, px * 0.46, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function redrawTexture() {
+  const ctx = texCtx;
+  const size = TEX_SIZE;
+
+  // Background
+  ctx.fillStyle = '#5f7f92';
+  ctx.fillRect(0, 0, size, size);
+
+  drawSurfaceGrid(ctx, size);
+
+  markCtxFront.clearRect(0, 0, size, size);
+  markCtxBack.clearRect(0, 0, size, size);
+  for (const faceKey of CUBE_FACE_KEYS) {
+    sphereMarkCtxFront[faceKey].clearRect(0, 0, SPHERE_FACE_TEX_SIZE, SPHERE_FACE_TEX_SIZE);
+    sphereMarkCtxBack[faceKey].clearRect(0, 0, SPHERE_FACE_TEX_SIZE, SPHERE_FACE_TEX_SIZE);
+  }
+  for (const face of getGenus2Topology().faces) {
+    genus2MarkCtx[face.key].clearRect(0, 0, GENUS2_FACE_TEX_SIZE, GENUS2_FACE_TEX_SIZE);
+    genus2MarkCtxBack[face.key].clearRect(0, 0, GENUS2_FACE_TEX_SIZE, GENUS2_FACE_TEX_SIZE);
+  }
+
+  drawTopologyCutMarks();
+
+  if (SHOW_REVERSE_SNAKE) {
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      const { x, y } = cellCenter(s.gx, s.gy, s.face);
+      const ctx = markContextFor(s, -(s.side ?? 1));
+      drawReverseSnakeMark(ctx, x, y, textureCellPx(), i === 0);
+    }
+  }
+
+  for (const f of foods) {
+    drawFoodMark(markContextFor(f), f);
+  }
+
+  for (let i = snake.length - 1; i >= 0; i--) {
+    drawSnakeMark(markContextFor(snake[i]), snake[i], i);
+  }
+
+  for (const portal of portals) {
+    const { x, y } = cellCenter(portal.gx, portal.gy);
+    for (const ctx of [markCtxFront, markCtxBack]) {
+      drawPortalMark(ctx, portal, x, y, textureCellPx());
+    }
+  }
+
+  gridTex.needsUpdate = true;
+  markTexFront.needsUpdate = true;
+  markTexBack.needsUpdate = true;
+  for (const faceKey of CUBE_FACE_KEYS) {
+    sphereMarkTexFront[faceKey].needsUpdate = true;
+    sphereMarkTexBack[faceKey].needsUpdate = true;
+  }
+  for (const face of getGenus2Topology().faces) {
+    genus2MarkTex[face.key].needsUpdate = true;
+    genus2MarkTexBack[face.key].needsUpdate = true;
+  }
+}
+
+/* ===========================
+   COORDINATE SYSTEM
+   =========================== */
+function to3D(gx, gy, face = 'F') {
+  if (MAP_TYPE === 'genus2') {
+    const p = genus2Point(gx, gy, face || genus2StartFaceKey());
+    return { x: p.x, y: p.y, z: p.z };
+  }
+  if (MAP_TYPE === 'projective') {
+    const p = projectivePointUV((gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
+    return { x: p.x, y: p.y, z: p.z };
+  }
+  if (MAP_TYPE === 'sphere') {
+    const p = cubeSpherePoint(face, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE);
+    return { x: p.x, y: p.y, z: p.z };
+  }
+  if (MAP_TYPE === 'mobius') {
+    const p = mobiusPointUV(gx / GRID_SIZE, gy / (GRID_SIZE - 1));
+    return { x: p.x, y: p.y, z: p.z };
+  }
+  if (MAP_TYPE === 'klein') {
+    const p = kleinPointUV(gx / GRID_SIZE, gy / GRID_SIZE);
+    return { x: p.x, y: p.y, z: p.z };
+  }
+  const R = getR();
+  const r = getr();
+  const theta = (gx / GRID_SIZE) * Math.PI * 2;
+  const cosTheta = Math.cos(theta);
+  const sinTheta = Math.sin(theta);
+  const phi = (gy / GRID_SIZE) * Math.PI * 2;
+  const cosPhi = Math.cos(phi);
+  const sinPhi = Math.sin(phi);
+  return {
+    x: (R + r * cosPhi) * cosTheta,
+    y: r * sinPhi,
+    z: (R + r * cosPhi) * sinTheta,
+  };
+}
+
+function surfaceNormal(gx, gy, face = 'F') {
+  if (MAP_TYPE === 'genus2') {
+    const p = genus2Point(gx, gy, face || genus2StartFaceKey());
+    return estimateGenus2Normal(p.x, p.y, p.z);
+  }
+  if (MAP_TYPE === 'projective') {
+    const u = gx / GRID_SIZE;
+    const v = gy / GRID_SIZE;
+    const step = 1 / GRID_SIZE;
+    const du = projectivePointUV(u + step, v).sub(projectivePointUV(u - step, v));
+    const dv = projectivePointUV(u, v + step).sub(projectivePointUV(u, v - step));
+    return new THREE.Vector3().crossVectors(du, dv).normalize();
+  }
+  if (MAP_TYPE === 'mobius' || MAP_TYPE === 'klein') {
+    const u = gx / GRID_SIZE;
+    const v = MAP_TYPE === 'mobius' ? gy / (GRID_SIZE - 1) : gy / GRID_SIZE;
+    const pointFn = MAP_TYPE === 'mobius' ? mobiusPointUV : kleinPointUV;
+    const du = pointFn(u + 1 / GRID_SIZE, v).sub(pointFn(u - 1 / GRID_SIZE, v));
+    const dvStep = 1 / (GRID_SIZE - 1);
+    const dv = pointFn(u, v + dvStep).sub(pointFn(u, v - dvStep));
+    return new THREE.Vector3().crossVectors(du, dv).normalize();
+  }
+  if (MAP_TYPE === 'sphere') {
+    return cubeSpherePoint(face, (gx + 0.5) / GRID_SIZE, (gy + 0.5) / GRID_SIZE).normalize();
+  }
+  const R = getR();
+  const r = getr();
+  const theta = (gx / GRID_SIZE) * Math.PI * 2;
+  const cosTheta = Math.cos(theta);
+  const sinTheta = Math.sin(theta);
+  const phi = (gy / GRID_SIZE) * Math.PI * 2;
+  const cosPhi = Math.cos(phi);
+  const sinPhi = Math.sin(phi);
+  return new THREE.Vector3(
+    cosPhi * cosTheta,
+    sinPhi,
+    cosPhi * sinTheta,
+  );
+}
+
+function disposeMaterial(material) {
+  if (Array.isArray(material)) {
+    material.forEach(disposeMaterial);
+    return;
+  }
+  if (!material) return;
+  if (material.map) material.map.dispose();
+  material.dispose();
+}
+
+function disposeObject3D(object) {
+  object.traverse(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) disposeMaterial(child.material);
+  });
+}
+
+function makeCutTube(points, color, radius, closed = false) {
+  const curve = new THREE.CatmullRomCurve3(points, closed);
+  const geometry = new THREE.TubeGeometry(curve, Math.max(8, points.length * 2), radius * fieldScale, 10, closed);
+  const material = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity: 0.98,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 4;
+  return mesh;
+}
+
+function makeCutPolylineTube(points, color, radius, depthTest = false) {
+  if (points.length < 2) return new THREE.Group();
+  const path = new THREE.CurvePath();
+  for (let i = 1; i < points.length; i++) {
+    path.add(new THREE.LineCurve3(points[i - 1], points[i]));
+  }
+  const geometry = new THREE.TubeGeometry(path, Math.max(8, points.length * 2), radius * fieldScale, 10, false);
+  const material = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity: 0.98,
+    depthWrite: false,
+    depthTest,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 4;
+  return mesh;
+}
+
+function makeCutLabelSprite(label, color, scale) {
+  const canvas = document.createElement('canvas');
+  const size = 96;
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = 'rgba(6,16,24,0.92)';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#061018';
+  ctx.font = 'bold 42px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, size / 2, size / 2 + 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(scale * fieldScale, scale * fieldScale, scale * fieldScale);
+  sprite.renderOrder = 5;
+  return sprite;
+}
+
+function sampleParametricLoop(pointFn, count, uvAt) {
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const uv = uvAt(i / count);
+    points.push(pointFn(uv.u, uv.v));
+  }
+  return points;
+}
+
+function sampleParametricPath(pointFn, segments, uvAt) {
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const uv = uvAt(i / segments);
+    points.push(pointFn(uv.u, uv.v));
+  }
+  return points;
+}
+
+function projectiveBoundaryOverlayPoints() {
+  return sampleParametricLoop(projectivePointUV, 96, t => {
+    const q = t * 4;
+    if (q < 1) return { u: q, v: 0 };
+    if (q < 2) return { u: 1, v: q - 1 };
+    if (q < 3) return { u: 3 - q, v: 1 };
+    return { u: 0, v: 4 - q };
+  });
+}
+
+function kleinCutOverlayPaths() {
+  const uA = KLEIN_CUT_A_X / GRID_SIZE;
+  const vB = KLEIN_CUT_B_Y / GRID_SIZE;
+  return [
+    {
+      label: 'a',
+      color: CUT_COLORS.a,
+      points: sampleParametricPath(kleinPointUV, 128, t => ({ u: uA, v: t })),
+    },
+    {
+      label: 'b',
+      color: CUT_COLORS.b,
+      points: sampleParametricPath(kleinPointUV, 160, t => ({ u: t, v: vB })),
+    },
+  ];
+}
+
+function createCutOverlayGroup() {
+  if (!LOOP_WIN_MAPS.has(MAP_TYPE)) return null;
+  const group = new THREE.Group();
+  group.name = 'cut-overlay';
+
+  if (MAP_TYPE === 'torus') {
+    return null;
+  } else if (MAP_TYPE === 'genus2') {
+    for (const loop of getGenus2CutSchema().loops) {
+      group.add(makeCutTube(loop.points, loop.color, 0.014, false));
+      const sprite = makeCutLabelSprite(loop.label, loop.color, 0.13);
+      const labelPoint = loop.points[Math.floor(loop.points.length / 2)] || loop.points[0];
+      sprite.position.copy(labelPoint);
+      group.add(sprite);
+    }
+  } else if (MAP_TYPE === 'projective') {
+    const points = projectiveBoundaryOverlayPoints();
+    group.add(makeCutTube(points, CUT_COLORS.a, 0.012, true));
+    const sprite = makeCutLabelSprite('a', CUT_COLORS.a, 0.13);
+    sprite.position.copy(points[Math.floor(points.length * 0.12)] || points[0]);
+    group.add(sprite);
+  } else if (MAP_TYPE === 'klein') {
+    for (const path of kleinCutOverlayPaths()) {
+      group.add(makeCutPolylineTube(path.points, path.color, 0.012, false));
+      const sprite = makeCutLabelSprite(path.label, path.color, 0.13);
+      const labelPoint = path.points[Math.floor(path.points.length / 3)] || path.points[0];
+      sprite.position.copy(labelPoint);
+      group.add(sprite);
+    }
+  }
+
+  return group.children.length > 0 ? group : null;
+}
+
+/* ===========================
+   SNAKE
+   =========================== */
+let snake = [];
+let direction, nextDir, chartDisplayDir, chartMirror;
+let pi1LastStep = null;
+
+function wrapGrid(v) {
+  return ((v % GRID_SIZE) + GRID_SIZE) % GRID_SIZE;
+}
+
+function clampCell(v) {
+  return Math.max(0, Math.min(GRID_SIZE - 1, v));
+}
+
+function clampGenus2Cell(v) {
+  return Math.max(0, Math.min(GENUS2_PATCH_CELLS - 1, v));
+}
+
+function normalizeCubeSpherePosition(gx, gy, dir, side, faceKey) {
+  let currentFace = faceKey || 'F';
+  let ndir = dir ? { ...dir } : null;
+  let guard = 0;
+  while ((gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) && guard++ < 12) {
+    let edge;
+    let overshoot;
+    if (gx < 0) {
+      edge = 'L';
+      overshoot = -gx - 1;
+    } else if (gx >= GRID_SIZE) {
+      edge = 'R';
+      overshoot = gx - GRID_SIZE;
+    } else if (gy < 0) {
+      edge = 'U';
+      overshoot = -gy - 1;
+    } else {
+      edge = 'D';
+      overshoot = gy - GRID_SIZE;
+    }
+
+    const transition = CUBE_TRANSITIONS[currentFace][edge](clampCell(gx), clampCell(gy));
+    ndir = transition.dir;
+    gx = transition.gx + ndir.dx * overshoot;
+    gy = transition.gy + ndir.dy * overshoot;
+    currentFace = transition.face;
+  }
+  return {
+    gx: clampCell(gx),
+    gy: clampCell(gy),
+    dir: ndir,
+    side,
+    face: currentFace,
+  };
+}
+
+function genus2InwardDirection(edge) {
+  if (edge === 'L') return { dx: 1, dy: 0 };
+  if (edge === 'R') return { dx: -1, dy: 0 };
+  if (edge === 'U') return { dx: 0, dy: 1 };
+  return { dx: 0, dy: -1 };
+}
+
+function genus2EntryCell(edge, edgeCell) {
+  if (edge === 'L') return { gx: 0, gy: edgeCell };
+  if (edge === 'R') return { gx: GENUS2_PATCH_CELLS - 1, gy: edgeCell };
+  if (edge === 'U') return { gx: edgeCell, gy: 0 };
+  return { gx: edgeCell, gy: GENUS2_PATCH_CELLS - 1 };
+}
+
+function genus2EdgeSample(face, edge, edgeCell) {
+  const t = (edgeCell + 0.5) / GENUS2_PATCH_CELLS;
+  return genus2EdgePoint(face, edge, t);
+}
+
+function normalizeGenus2Position(gx, gy, dir, side, faceKey) {
+  const topology = getGenus2Topology();
+  let currentFaceKey = faceKey || topology.startFaceKey;
+  let ndir = dir ? { ...dir } : null;
+  let guard = 0;
+
+  while ((gx < 0 || gx >= GENUS2_PATCH_CELLS || gy < 0 || gy >= GENUS2_PATCH_CELLS) && guard++ < 20) {
+    let edge;
+    let overshoot;
+    let edgeCell;
+    if (gx < 0) {
+      edge = 'L';
+      overshoot = -gx - 1;
+      edgeCell = clampGenus2Cell(gy);
+    } else if (gx >= GENUS2_PATCH_CELLS) {
+      edge = 'R';
+      overshoot = gx - GENUS2_PATCH_CELLS;
+      edgeCell = clampGenus2Cell(gy);
+    } else if (gy < 0) {
+      edge = 'U';
+      overshoot = -gy - 1;
+      edgeCell = clampGenus2Cell(gx);
+    } else {
+      edge = 'D';
+      overshoot = gy - GENUS2_PATCH_CELLS;
+      edgeCell = clampGenus2Cell(gx);
+    }
+
+    const currentFace = topology.faceMap.get(currentFaceKey);
+    const transition = currentFace?.transitions[edge];
+    if (!transition) return { gx, gy, dir: ndir, side, face: currentFaceKey, blocked: true };
+
+    const sample = genus2EdgeSample(currentFace, edge, edgeCell);
+    const nextFace = topology.faceMap.get(transition.face);
+    const uv = genus2LocalUVFromVoxel(nextFace, sample);
+    const nextEdgeCell = transition.edge === 'L' || transition.edge === 'R'
+      ? clampGenus2Cell(Math.floor(uv.v * GENUS2_PATCH_CELLS))
+      : clampGenus2Cell(Math.floor(uv.u * GENUS2_PATCH_CELLS));
+    const entry = genus2EntryCell(transition.edge, nextEdgeCell);
+    ndir = genus2InwardDirection(transition.edge);
+    gx = entry.gx + ndir.dx * overshoot;
+    gy = entry.gy + ndir.dy * overshoot;
+    currentFaceKey = transition.face;
+  }
+
+  return {
+    gx: clampGenus2Cell(gx),
+    gy: clampGenus2Cell(gy),
+    dir: ndir,
+    side,
+    face: currentFaceKey,
+    mirror: 1,
+  };
+}
+
+function normalizeGridPosition(gx, gy, dir = null, side = 1, face = null) {
+  const ndir = dir ? { ...dir } : null;
+  let nside = side;
+  let mirror = 1;
+
+  if (MAP_TYPE === 'sphere') {
+    return normalizeCubeSpherePosition(gx, gy, ndir, nside, face || 'F');
+  }
+
+  if (MAP_TYPE === 'genus2') {
+    return normalizeGenus2Position(gx, gy, ndir, nside, face || genus2StartFaceKey());
+  }
+
+  if (MAP_TYPE === 'projective') {
+    while (gx < 0 || gx >= GRID_SIZE) {
+      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
+      gy = GRID_SIZE - 1 - gy;
+      nside *= -1;
+      mirror *= -1;
+      if (ndir) ndir.dy *= -1;
+    }
+    while (gy < 0 || gy >= GRID_SIZE) {
+      gy += gy < 0 ? GRID_SIZE : -GRID_SIZE;
+      gx = GRID_SIZE - 1 - gx;
+      nside *= -1;
+      mirror *= -1;
+      if (ndir) ndir.dx *= -1;
+    }
+    return { gx, gy, dir: ndir, side: nside, mirror };
+  }
+
+  if (MAP_TYPE === 'mobius') {
+    while (gx < 0 || gx >= GRID_SIZE) {
+      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
+      gy = GRID_SIZE - 1 - gy;
+      nside *= -1;
+      mirror *= -1;
+      if (ndir) ndir.dy *= -1;
+    }
+    while (gy < 0 || gy >= GRID_SIZE) {
+      gy = gy < 0 ? -gy - 1 : (GRID_SIZE - 1) - (gy - GRID_SIZE);
+      nside *= -1;
+      mirror *= -1;
+      if (ndir) ndir.dy *= -1;
+    }
+    return { gx, gy, dir: ndir, side: nside, mirror };
+  }
+
+  if (MAP_TYPE === 'klein') {
+    while (gx < 0 || gx >= GRID_SIZE) {
+      gx += gx < 0 ? GRID_SIZE : -GRID_SIZE;
+      gy = wrapGrid(GRID_SIZE / 2 - 1 - gy);
+      nside *= -1;
+      mirror *= -1;
+      if (ndir) ndir.dy *= -1;
+    }
+    return { gx, gy: wrapGrid(gy), dir: ndir, side: nside, mirror };
+  }
+
+  return { gx: wrapGrid(gx), gy: wrapGrid(gy), dir: ndir, side: nside, mirror };
+}
+
+function inverseLetter(letter) {
+  return letter === letter.toLowerCase() ? letter.toUpperCase() : letter.toLowerCase();
+}
+
+function invertWord(word) {
+  return word.slice().reverse().map(inverseLetter);
+}
+
+function freeReduceWord(word) {
+  const reduced = [];
+  for (const letter of word) {
+    if (reduced.length > 0 && inverseLetter(letter) === reduced[reduced.length - 1]) {
+      reduced.pop();
+    } else {
+      reduced.push(letter);
+    }
+  }
+  return reduced;
+}
+
+function symmetrizedRelators(relator) {
+  const variants = [];
+  const sources = [relator, invertWord(relator)];
+  for (const source of sources) {
+    for (let i = 0; i < source.length; i++) {
+      variants.push(source.slice(i).concat(source.slice(0, i)));
+    }
+  }
+  return variants;
+}
+
+function wordMatchesAt(word, start, pattern) {
+  if (start + pattern.length > word.length) return false;
+  for (let i = 0; i < pattern.length; i++) {
+    if (word[start + i] !== pattern[i]) return false;
+  }
+  return true;
+}
+
+function dehnRulesFromRelator(relator) {
+  const rules = [];
+  const halfLength = relator.length / 2;
+  for (const variant of symmetrizedRelators(relator)) {
+    for (let len = relator.length; len > halfLength; len--) {
+      rules.push({
+        pattern: variant.slice(0, len),
+        replacement: invertWord(variant.slice(len)),
+      });
+    }
+  }
+  return rules.sort((left, right) => right.pattern.length - left.pattern.length);
+}
+
+const GENUS2_DEHN_RULES = dehnRulesFromRelator(GENUS2_RELATOR);
+
+function reduceGenus2Word(word) {
+  let current = freeReduceWord(word);
+
+  while (current.length > 0) {
+    let match = null;
+    for (let start = 0; start < current.length && !match; start++) {
+      for (const rule of GENUS2_DEHN_RULES) {
+        if (!wordMatchesAt(current, start, rule.pattern)) continue;
+        match = { start, rule };
+        break;
+      }
+    }
+
+    if (!match) return current;
+
+    current = freeReduceWord([
+      ...current.slice(0, match.start),
+      ...match.rule.replacement,
+      ...current.slice(match.start + match.rule.pattern.length),
+    ]);
+  }
+
+  return current;
+}
+
+function reduceProjectiveWord(word) {
+  const count = word.filter(letter => letter.toLowerCase() === 'a').length;
+  return count % 2 === 1 ? ['a'] : [];
+}
+
+function repeatSignedLetter(label, exponent) {
+  const n = Math.abs(exponent);
+  const letter = exponent >= 0 ? label : label.toUpperCase();
+  return Array.from({ length: n }, () => letter);
+}
+
+function kleinNormalFormFromWord(word) {
+  let a = 0;
+  let b = 0;
+  for (const letter of word) {
+    if (letter === 'a') {
+      a += 1;
+      b = -b;
+    } else if (letter === 'A') {
+      a -= 1;
+      b = -b;
+    } else if (letter === 'b') {
+      b += 1;
+    } else if (letter === 'B') {
+      b -= 1;
+    }
+  }
+  return { a, b };
+}
+
+function kleinWordFromNormal(normal) {
+  return [
+    ...repeatSignedLetter('a', normal.a),
+    ...repeatSignedLetter('b', normal.b),
+  ];
+}
+
+function reduceKleinWord(word) {
+  return kleinWordFromNormal(kleinNormalFormFromWord(word));
+}
+
+function reduceTopologyWord(word) {
+  if (MAP_TYPE === 'genus2') return reduceGenus2Word(word);
+  if (MAP_TYPE === 'projective') return reduceProjectiveWord(word);
+  if (MAP_TYPE === 'klein') return reduceKleinWord(word);
+  return freeReduceWord(word);
+}
+
+function invertTopologyWord(word) {
+  if (MAP_TYPE === 'projective') {
+    return word.slice().reverse().map(() => 'a');
+  }
+  return invertWord(word);
+}
+
+function kleinIdentityFrame() {
+  return { ySign: 1 };
+}
+
+function cloneKleinFrame(frame) {
+  return { ySign: frame?.ySign ?? 1 };
+}
+
+function emptyTopologyState() {
+  if (MAP_TYPE === 'torus') return { wx: 0, wy: 0 };
+  if (MAP_TYPE === 'mobius') return { w: 0, boundary: 0 };
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') return { word: [] };
+  if (MAP_TYPE === 'klein') return { word: [], frame: kleinIdentityFrame() };
+  return null;
+}
+
+function cloneTopologyState(state) {
+  if (!state) return emptyTopologyState();
+  if (MAP_TYPE === 'torus') return { wx: state.wx || 0, wy: state.wy || 0 };
+  if (MAP_TYPE === 'mobius') return { w: state.w || 0, boundary: state.boundary || 0 };
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') return { word: [...(state.word || [])] };
+  if (MAP_TYPE === 'klein') return { word: [...(state.word || [])], frame: cloneKleinFrame(state.frame) };
+  return null;
+}
+
+function torusStepDelta(from, moveDir) {
+  let wx = 0;
+  let wy = 0;
+  if (moveDir.dx === 1 && (from.gx + 1) % GRID_SIZE === TORUS_CUT_X) wx = 1;
+  if (moveDir.dx === -1 && from.gx === TORUS_CUT_X) wx = -1;
+  if (moveDir.dy === 1 && (from.gy + 1) % GRID_SIZE === TORUS_CUT_Y) wy = 1;
+  if (moveDir.dy === -1 && from.gy === TORUS_CUT_Y) wy = -1;
+  return { wx, wy };
+}
+
+function moveDirToEdge(moveDir) {
+  if (moveDir.dx === 1) return 'R';
+  if (moveDir.dx === -1) return 'L';
+  if (moveDir.dy === 1) return 'D';
+  return 'U';
+}
+
+function genus2MoveEdgeKey(from, moveDir) {
+  return genus2GridEdgeKey(
+    from.face || genus2StartFaceKey(),
+    from.gx,
+    from.gy,
+    moveDirToEdge(moveDir),
+  );
+}
+
+function genus2CellVoxelPoint(faceKey, gx, gy) {
+  const topology = getGenus2Topology();
+  const face = topology.faceMap.get(faceKey || topology.startFaceKey);
+  return genus2VoxelPoint(
+    face,
+    (gx + 0.5) / GENUS2_PATCH_CELLS,
+    (gy + 0.5) / GENUS2_PATCH_CELLS,
+  );
+}
+
+function genus2MoveInCutCoordinates(from, moveDir, cutFaceKey) {
+  const topology = getGenus2Topology();
+  const fromFace = from.face || topology.startFaceKey;
+  const cutFace = topology.faceMap.get(cutFaceKey || fromFace);
+  if (!cutFace) return { dx: moveDir.dx, dy: moveDir.dy };
+  const next = normalizeGenus2Position(
+    from.gx + moveDir.dx,
+    from.gy + moveDir.dy,
+    moveDir,
+    from.side ?? 1,
+    fromFace,
+  );
+  if (next.blocked) return null;
+  const fromUv = genus2LocalUVFromVoxel(cutFace, genus2CellVoxelPoint(fromFace, from.gx, from.gy));
+  const toUv = genus2LocalUVFromVoxel(cutFace, genus2CellVoxelPoint(next.face, next.gx, next.gy));
+  return {
+    dx: (toUv.u - fromUv.u) * GENUS2_PATCH_CELLS,
+    dy: (toUv.v - fromUv.v) * GENUS2_PATCH_CELLS,
+  };
+}
+
+function genus2StepCrossingCandidates(from, moveDir) {
+  const edgeKey = genus2MoveEdgeKey(from, moveDir);
+  const cuts = getGenus2CutSchema().byEdgeKey.get(edgeKey);
+  const face = from.face || genus2StartFaceKey();
+  return (cuts || []).map(cut => {
+    const cutMove = genus2MoveInCutCoordinates(from, moveDir, cut.face);
+    if (!cutMove) return null;
+    const det = cut.tx * cutMove.dy - cut.ty * cutMove.dx;
+    return {
+      cut,
+      det,
+      letter: det > 0 ? cut.label : cut.label.toUpperCase(),
+      sameFace: cut.face === face,
+    };
+  }).filter(candidate => candidate && Math.abs(candidate.det) > 1e-6);
+}
+
+function genus2CutsHaveSameTangent(a, b) {
+  return a.cut.tx === b.cut.tx && a.cut.ty === b.cut.ty;
+}
+
+function genus2OrderOverlappingCrossings(crossings) {
+  const labels = crossings.map(crossing => crossing.cut.label).sort().join('');
+  const orderByMiddleCut = (outerLabel, middleLabel) => {
+    const middle = crossings.find(crossing => crossing.cut.label === middleLabel);
+    const outers = crossings.filter(crossing => crossing.cut.label === outerLabel);
+    if (!middle || outers.length !== 2) return crossings;
+    const before = outers.find(crossing => genus2CutsHaveSameTangent(crossing, middle)) || outers[0];
+    const after = outers.find(crossing => crossing !== before) || outers[1];
+    return [before, middle, after];
+  };
+  if (labels === 'aac') return orderByMiddleCut('a', 'c');
+  if (labels === 'bbd') return orderByMiddleCut('b', 'd');
+  return crossings;
+}
+
+function genus2SelectedStepCrossing(from, moveDir) {
+  const candidates = genus2StepCrossingCandidates(from, moveDir);
+  if (candidates.length === 0) return null;
+  return genus2ActiveStepCrossings(from, moveDir)[0] || null;
+}
+
+function genus2ActiveStepCrossings(from, moveDir) {
+  const candidates = genus2StepCrossingCandidates(from, moveDir);
+  if (candidates.length === 0) return [];
+  const sameFace = candidates.filter(candidate => candidate.sameFace);
+  const active = sameFace.length > 0 ? sameFace : [candidates[0]];
+  const ordered = genus2OrderOverlappingCrossings(active);
+  return ordered.length > 1 && ordered[0].det < 0 ? ordered.slice().reverse() : ordered;
+}
+
+function genus2StepWord(from, moveDir) {
+  return genus2ActiveStepCrossings(from, moveDir).map(crossing => crossing.letter);
+}
+
+function boundaryCrossingEdge(from, moveDir) {
+  if (moveDir.dx === 1 && from.gx === GRID_SIZE - 1) return 'R';
+  if (moveDir.dx === -1 && from.gx === 0) return 'L';
+  if (moveDir.dy === 1 && from.gy === GRID_SIZE - 1) return 'D';
+  if (moveDir.dy === -1 && from.gy === 0) return 'U';
+  return null;
+}
+
+function projectiveStepWord(from, moveDir) {
+  return boundaryCrossingEdge(from, moveDir) ? ['a'] : [];
+}
+
+function mobiusStepDelta(from, moveDir) {
+  let w = 0;
+  let boundary = 0;
+  if (moveDir.dx === 1 && from.gx === GRID_SIZE - 1) w = 1;
+  if (moveDir.dx === -1 && from.gx === 0) w = -1;
+  if (moveDir.dy === 1 && from.gy === GRID_SIZE - 1) boundary = 1;
+  if (moveDir.dy === -1 && from.gy === 0) boundary = 1;
+  return { w, boundary };
+}
+
+const KLEIN_CUTS = {
+  // Fixed cut directions in the square chart.  The sign of b-crossings is read
+  // after converting the move to the current topology frame.
+  a: { label: 'a', tx: 0, ty: -1, cut: `u=${KLEIN_CUT_A_X}/N` },
+  b: { label: 'b', tx: 1, ty: 0, cut: `v=${KLEIN_CUT_B_Y}/N` },
+};
+
+function crossesPeriodicGridLine(pos, delta, line) {
+  if (delta === 1) return wrapGrid(pos + 1) === line;
+  if (delta === -1) return wrapGrid(pos) === line;
+  return false;
+}
+
+function kleinTopoMove(state, moveDir) {
+  const ySign = state?.frame?.ySign ?? 1;
+  return {
+    dx: moveDir.dx,
+    dy: ySign * moveDir.dy,
+  };
+}
+
+function kleinLetterFromCrossing(cut, topoMove) {
+  const det = cut.tx * topoMove.dy - cut.ty * topoMove.dx;
+  return {
+    det,
+    letter: det > 0 ? cut.label : cut.label.toUpperCase(),
+  };
+}
+
+function kleinStepCrossing(from, moveDir, state = from?.topo) {
+  const current = cloneTopologyState(state);
+  const topoMove = kleinTopoMove(current, moveDir);
+
+  if (moveDir.dx !== 0 && crossesPeriodicGridLine(from.gx, moveDir.dx, KLEIN_CUT_A_X)) {
+    const cut = KLEIN_CUTS.a;
+    return { ...cut, ...kleinLetterFromCrossing(cut, topoMove), topoMove };
+  }
+
+  if (moveDir.dy !== 0 && crossesPeriodicGridLine(from.gy, moveDir.dy, KLEIN_CUT_B_Y)) {
+    const cut = KLEIN_CUTS.b;
+    return { ...cut, ...kleinLetterFromCrossing(cut, topoMove), topoMove };
+  }
+
+  return null;
+}
+
+function kleinStepWord(from, moveDir, state = from?.topo) {
+  const crossing = kleinStepCrossing(from, moveDir, state);
+  return crossing ? [crossing.letter] : [];
+}
+
+function advanceKleinTopologyState(state, from, moveDir) {
+  const current = cloneTopologyState(state);
+  const crossing = kleinStepCrossing(from, moveDir, current);
+  const nextYSign = crossing?.label === 'a'
+    ? -current.frame.ySign
+    : current.frame.ySign;
+  return {
+    // Keep the raw cut-crossing word.  Reduction is only for testing/displaying
+    // closed-loop classes; appending one step must not rewrite old crossings.
+    word: [...current.word, ...(crossing ? [crossing.letter] : [])],
+    frame: { ySign: nextYSign },
+  };
+}
+
+function advanceTopologyState(state, from, moveDir) {
+  if (!LOOP_WIN_MAPS.has(MAP_TYPE)) return null;
+  const current = cloneTopologyState(state);
+  if (MAP_TYPE === 'torus') {
+    const delta = torusStepDelta(from, moveDir);
+    return {
+      wx: current.wx + delta.wx,
+      wy: current.wy + delta.wy,
+    };
+  }
+  if (MAP_TYPE === 'genus2') {
+    return {
+      word: reduceGenus2Word([...current.word, ...genus2StepWord(from, moveDir)]),
+    };
+  }
+  if (MAP_TYPE === 'projective') {
+    return {
+      word: reduceProjectiveWord([...current.word, ...projectiveStepWord(from, moveDir)]),
+    };
+  }
+  if (MAP_TYPE === 'mobius') {
+    const delta = mobiusStepDelta(from, moveDir);
+    return {
+      w: current.w + delta.w,
+      boundary: current.boundary + delta.boundary,
+    };
+  }
+  if (MAP_TYPE === 'klein') {
+    return advanceKleinTopologyState(current, from, moveDir);
+  }
+  return null;
+}
+
+function inferStepDirection(from, to) {
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+  for (const dir of directions) {
+    const next = normalizeGridPosition(from.gx + dir.dx, from.gy + dir.dy, dir, from.side, from.face);
+    if (
+      !next.blocked &&
+      next.gx === to.gx &&
+      next.gy === to.gy &&
+      sameSurfaceSide(next.side, to.side) &&
+      sameSurfaceFace(next.face, to.face)
+    ) {
+      return dir;
+    }
+  }
+  return null;
+}
+
+function initializeSnakeTopology() {
+  if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return;
+  const states = new Array(snake.length);
+  let state = emptyTopologyState();
+  states[snake.length - 1] = cloneTopologyState(state);
+
+  for (let i = snake.length - 1; i > 0; i--) {
+    const dir = inferStepDirection(snake[i], snake[i - 1]);
+    if (dir) state = advanceTopologyState(state, snake[i], dir);
+    states[i - 1] = cloneTopologyState(state);
+  }
+
+  snake = snake.map((segment, i) => ({
+    ...segment,
+    topo: cloneTopologyState(states[i]),
+  }));
+}
+
+function wordFormula(word) {
+  return word && word.length > 0 ? word.join('') : '1';
+}
+
+function powerTerm(label, exponent) {
+  if (exponent === 0) return '';
+  const base = exponent > 0 ? label : label.toUpperCase();
+  const n = Math.abs(exponent);
+  return n === 1 ? base : `${base}^${n}`;
+}
+
+function torusStateFormula(state) {
+  const wx = state?.wx || 0;
+  const wy = state?.wy || 0;
+  return [powerTerm('a', wx), powerTerm('b', wy)].filter(Boolean).join(' ') || '1';
+}
+
+function mobiusStateFormula(state) {
+  const w = state?.w || 0;
+  const boundary = state?.boundary || 0;
+  const loop = powerTerm('a', w) || '1';
+  return boundary > 0 ? `${loop}; ${tr('crossedBoundary', { n: boundary })}` : loop;
+}
+
+function kleinNormalFormula(word) {
+  const normal = kleinNormalFormFromWord(word || []);
+  return [powerTerm('a', normal.a), powerTerm('b', normal.b)].filter(Boolean).join(' ') || '1';
+}
+
+function topologyWordFormula(word) {
+  if (MAP_TYPE === 'klein') return kleinNormalFormula(word);
+  return wordFormula(word);
+}
+
+function topologyStateFormula(state) {
+  if (MAP_TYPE === 'torus') return torusStateFormula(state);
+  if (MAP_TYPE === 'mobius') return mobiusStateFormula(state);
+  if (MAP_TYPE === 'klein') return wordFormula(state?.word || []);
+  if (MAP_TYPE === 'genus2' || MAP_TYPE === 'projective') return topologyWordFormula(state?.word || []);
+  return '1';
+}
+
+function topologyRelationFormula() {
+  if (MAP_TYPE === 'torus') return 'abAB = 1';
+  if (MAP_TYPE === 'genus2') return `${GENUS2_RELATOR.join('')} = 1`;
+  if (MAP_TYPE === 'projective') return `${PROJECTIVE_RELATOR.join('')} = 1`;
+  if (MAP_TYPE === 'mobius') return `π1 = <a> ≅ Z; ${tr('noBoundaryCross')}`;
+  if (MAP_TYPE === 'klein') return `${KLEIN_RELATOR.join('')} = 1`;
+  return '-';
+}
+
+function loopWordLabel(word) {
+  return topologyWordFormula(word);
+}
+
+function setPi1Text(id, text, warn = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'pi1-val' + (warn ? ' pi1-warn' : '');
+}
+
+function describeTorusMove(from, moveDir) {
+  const current = cloneTopologyState(from.topo);
+  const delta = torusStepDelta(from, moveDir);
+  const letters = [];
+  if (delta.wx > 0) letters.push('a');
+  if (delta.wx < 0) letters.push('A');
+  if (delta.wy > 0) letters.push('b');
+  if (delta.wy < 0) letters.push('B');
+  if (letters.length === 0) {
+    return {
+      step: tr('noCut'),
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const next = {
+    wx: current.wx + delta.wx,
+    wy: current.wy + delta.wy,
+  };
+  return {
+    step: `cut ${letters.join('')} @ x=${TORUS_CUT_X}, y=${TORUS_CUT_Y}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: letters.map(letter => letter.toLowerCase()).join(','),
+    det: `${torusStateFormula(current)} · ${letters.join('')} = ${torusStateFormula(next)}`,
+  };
+}
+
+function describeGenus2Move(from, moveDir) {
+  const candidates = genus2StepCrossingCandidates(from, moveDir);
+  const active = genus2ActiveStepCrossings(from, moveDir);
+  const face = from.face || genus2StartFaceKey();
+  if (active.length === 0) {
+    return {
+      step: tr('noCut'),
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const letters = active.map(crossing => crossing.letter);
+  const labels = [...new Set(active.map(crossing => crossing.cut.label))].join(',');
+  const candidateText = candidates.length > active.length || active.length > 1
+    ? tr('candidates', { list: candidates.map(c => c.letter).join(','), letter: letters.join('') })
+    : `cut ${labels} -> ${letters.join('')}`;
+  return {
+    step: `${candidateText} @ ${face}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: active.map(crossing => `${crossing.cut.label}:(${crossing.cut.tx}, ${crossing.cut.ty})`).join('; '),
+    det: active.map(crossing => `${crossing.cut.tx}*${moveDir.dy} - ${crossing.cut.ty}*${moveDir.dx} = ${crossing.det}`).join('; '),
+    warn: candidates.length > active.length || active.length > 1,
+  };
+}
+
+function describeProjectiveMove(from, moveDir) {
+  const edge = boundaryCrossingEdge(from, moveDir);
+  if (!edge) {
+    return {
+      step: tr('noBoundaryCut'),
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const before = wordFormula(from.topo?.word || []);
+  const after = wordFormula(reduceProjectiveWord([...(from.topo?.word || []), 'a']));
+  return {
+    step: tr('boundaryToA', { edge }),
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: tr('boundaryEdge', { edge }),
+    det: `${before}·a -> ${after}, aa=1`,
+  };
+}
+
+function describeMobiusMove(from, moveDir) {
+  const delta = mobiusStepDelta(from, moveDir);
+  const before = mobiusStateFormula(from.topo);
+  const afterState = {
+    w: (from.topo?.w || 0) + delta.w,
+    boundary: (from.topo?.boundary || 0) + delta.boundary,
+  };
+  if (delta.boundary > 0) {
+    return {
+      step: tr('crossedStripBoundary'),
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: tr('bandBoundary'),
+      det: `${before} -> ${mobiusStateFormula(afterState)}; ${tr('noWinClosure')}`,
+    };
+  }
+  if (delta.w === 0) {
+    return {
+      step: tr('noCut'),
+      move: `(${moveDir.dx}, ${moveDir.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const letter = delta.w > 0 ? 'a' : 'A';
+  return {
+    step: `cut a -> ${letter}`,
+    move: `(${moveDir.dx}, ${moveDir.dy})`,
+    cut: tr('glueEdgeU'),
+    det: `${before}·${letter} = ${mobiusStateFormula(afterState)}`,
+  };
+}
+
+function describeKleinMove(from, moveDir) {
+  const current = cloneTopologyState(from.topo);
+  const crossing = kleinStepCrossing(from, moveDir, current);
+  const topoMove = kleinTopoMove(current, moveDir);
+  if (!crossing) {
+    return {
+      step: tr('noCut'),
+      move: `display (${moveDir.dx}, ${moveDir.dy}), topo (${topoMove.dx}, ${topoMove.dy})`,
+      cut: '-',
+      det: '-',
+    };
+  }
+  const beforeRaw = wordFormula(current.word || []);
+  const afterRawWord = [...(current.word || []), crossing.letter];
+  const cutName = crossing.label === 'a' ? 'a: u=1/2' : 'b: v=1/4';
+  return {
+    step: `cut ${crossing.label} -> ${crossing.letter}`,
+    move: `display (${moveDir.dx}, ${moveDir.dy}), topo (${crossing.topoMove.dx}, ${crossing.topoMove.dy})`,
+    cut: `${cutName}; tangent=(${crossing.tx}, ${crossing.ty})`,
+    det: `${crossing.tx}*${crossing.topoMove.dy} - ${crossing.ty}*${crossing.topoMove.dx} = ${crossing.det}; ${beforeRaw}·${crossing.letter} = ${wordFormula(afterRawWord)}; NF = ${kleinNormalFormula(afterRawWord)}`,
+  };
+}
+
+function describeTopologyMove(from, moveDir) {
+  if (MAP_TYPE === 'torus') return describeTorusMove(from, moveDir);
+  if (MAP_TYPE === 'genus2') return describeGenus2Move(from, moveDir);
+  if (MAP_TYPE === 'projective') return describeProjectiveMove(from, moveDir);
+  if (MAP_TYPE === 'mobius') return describeMobiusMove(from, moveDir);
+  if (MAP_TYPE === 'klein') return describeKleinMove(from, moveDir);
+  return null;
+}
+
+function topologyDifferenceInfo(fromTopo, toTopo) {
+  if (MAP_TYPE === 'sphere') {
+    return {
+      nontrivial: true,
+      label: tr('closedLoopAny'),
+      reducedLabel: tr('closedLoopAny'),
+      winText: tr('winClosed'),
+    };
+  }
+
+  if (MAP_TYPE === 'torus') {
+    const wx = (toTopo?.wx || 0) - (fromTopo?.wx || 0);
+    const wy = (toTopo?.wy || 0) - (fromTopo?.wy || 0);
+    return {
+      nontrivial: wx !== 0 || wy !== 0,
+      label: torusStateFormula({ wx, wy }),
+      reducedLabel: torusStateFormula({ wx, wy }),
+    };
+  }
+
+  if (MAP_TYPE === 'mobius') {
+    const w = (toTopo?.w || 0) - (fromTopo?.w || 0);
+    const boundary = (toTopo?.boundary || 0) - (fromTopo?.boundary || 0);
+    const crossesBoundary = boundary > 0;
+    return {
+      nontrivial: w !== 0 && !crossesBoundary,
+      label: mobiusStateFormula({ w, boundary }),
+      reducedLabel: mobiusStateFormula({ w, boundary }),
+      failLabel: crossesBoundary ? tr('failBoundary') : tr('failTrivial'),
+    };
+  }
+
+  const rawWord = [
+    ...invertTopologyWord(fromTopo?.word || []),
+    ...(toTopo?.word || []),
+  ];
+  const word = reduceTopologyWord(rawWord);
+  return {
+    nontrivial: word.length > 0,
+    label: loopWordLabel(word),
+    rawWord,
+    word,
+    reducedLabel: topologyWordFormula(word),
+  };
+}
+
+function updatePi1Panel() {
+  const panel = document.getElementById('pi1-panel');
+  if (!panel) return;
+  if (!topologyHintsVisible || !PI1_PANEL_MAPS.has(MAP_TYPE)) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  setPi1Text('pi1Rel', topologyRelationFormula());
+
+  const head = snake[0];
+  if (!head) return;
+  const tail = snake[snake.length - 1];
+
+  const last = pi1LastStep || {
+    step: tr('notMoved'),
+    move: '-',
+    cut: '-',
+    det: '-',
+  };
+  setPi1Text('pi1Step', last.step, !!last.warn);
+  setPi1Text('pi1Move', last.move);
+  setPi1Text('pi1Cut', last.cut);
+  setPi1Text('pi1Det', last.det);
+  setPi1Text('pi1Head', topologyStateFormula(head.topo));
+  setPi1Text('pi1Tail', topologyStateFormula(tail.topo));
+
+  const bodyInfo = topologyDifferenceInfo(tail.topo, head.topo);
+  setPi1Text('pi1Body', `T^-1 H = ${bodyInfo.reducedLabel}`);
+
+  const dir = nextDir || direction;
+  if (!dir) {
+    setPi1Text('pi1Close', '-');
+    return;
+  }
+  const next = nextSnakeStep(head, dir);
+  const hitSelfIdx = next.blocked
+    ? -1
+    : snake.findIndex(s => sameSnakeCell(s, next.gx, next.gy, next.side ?? 1, next.face ?? null));
+  if (hitSelfIdx === -1) {
+    setPi1Text('pi1Close', tr('nextNotClosed'));
+    return;
+  }
+
+  const newTopo = advanceTopologyState(head.topo, head, dir);
+  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
+  const loopInfo = topologyDifferenceInfo(hitTopo, newTopo);
+  const loopFormula = loopInfo.rawWord
+    ? `${wordFormula(loopInfo.rawWord)} -> ${loopInfo.reducedLabel}`
+    : loopInfo.reducedLabel;
+  setPi1Text(
+    'pi1Close',
+    `S${hitSelfIdx}^-1 H' = ${loopFormula} (${loopInfo.nontrivial ? tr('nontrivial') : tr('trivial')})`,
+    !loopInfo.nontrivial,
+  );
+}
+
+function selfClosureInfo(newTopo, hitSelfIdx) {
+  if (!LOOP_WIN_MAPS.has(MAP_TYPE) || snake.length === 0) return null;
+  const hitTopo = cloneTopologyState(snake[hitSelfIdx].topo);
+  return topologyDifferenceInfo(hitTopo, newTopo);
+}
+
+function buildInitialSnake(head, length) {
+  const body = [{ ...head }];
+  const targetLength = Math.max(1, Math.floor(length));
+  let current = { ...head };
+  const backDir = { dx: -1, dy: 0 };
+
+  for (let i = 1; i < targetLength; i++) {
+    const next = normalizeGridPosition(
+      current.gx + backDir.dx,
+      current.gy + backDir.dy,
+      backDir,
+      current.side,
+      current.face,
+    );
+    if (next.blocked) break;
+    current = {
+      gx: next.gx,
+      gy: next.gy,
+      side: next.side ?? 1,
+      face: next.face ?? null,
+    };
+    body.push({ ...current });
+  }
+
+  return body;
+}
+
+function resetSnake() {
+  pi1LastStep = null;
+  if (MAP_TYPE === 'genus2') {
+    const face = genus2StartFaceKey();
+    const gy = Math.floor(GENUS2_PATCH_CELLS / 2);
+    snake = buildInitialSnake(
+      { gx: Math.floor(GENUS2_PATCH_CELLS / 2), gy, side: 1, face },
+      INITIAL_SNAKE_LENGTH,
+    );
+    direction = { dx: 1, dy: 0 };
+    nextDir = { dx: 1, dy: 0 };
+    chartDisplayDir = { dx: 1, dy: 0 };
+    chartMirror = 1;
+    initializeSnakeTopology();
+    return;
+  }
+  const face = MAP_TYPE === 'sphere' ? 'F' : null;
+  const side = MAP_TYPE === 'projective' ? -1 : 1;
+  snake = buildInitialSnake(
+    { gx: Math.floor(GRID_SIZE / 2), gy: Math.floor(GRID_SIZE / 2), side, face },
+    INITIAL_SNAKE_LENGTH,
+  );
+  direction = { dx: 1, dy: 0 };
+  nextDir = { dx: 1, dy: 0 };
+  chartDisplayDir = { dx: 1, dy: 0 };
+  chartMirror = 1;
+  initializeSnakeTopology();
+}
+
+/* ===========================
+   FOOD
+   =========================== */
+let foods = [];
+let portals = [];
+let nextPortalId = 1;
+let portalSpawnElapsed = 0;
+let portalLastUpdate = 0;
+
+/* ===========================
+   GAME STATE
+   =========================== */
+let fieldScale = 1.0;
+let score, speed, best, running, paused;
+let spawnTimer;
+let msgTimer = null;
+let tickStartTime = 0;
+let tickInterval = 100;
+let loop = null;
+let topologyHintsVisible = false;
+
+function victoryGoalText() {
+  if (MAP_TYPE === 'sphere') return tr('goalSphere');
+  if (MAP_TYPE === 'torus') return tr('goalTorus');
+  if (MAP_TYPE === 'genus2') return tr('goalGenus2');
+  if (MAP_TYPE === 'projective') return tr('goalProjective');
+  if (MAP_TYPE === 'mobius') return tr('goalMobius');
+  if (MAP_TYPE === 'klein') return tr('goalKlein');
+  return tr('goalDefault');
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('best').textContent = best;
+  document.getElementById('goalText').textContent = victoryGoalText();
+  document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
+  document.getElementById('pauseBtn').textContent = paused ? tr('resume') : tr('pause');
+  document.getElementById('topologyHintsBtn').textContent = topologyHintsVisible ? tr('hideHints') : tr('showHints');
+}
+
+function sameSnakeCell(a, gx, gy, side, face) {
+  return a.gx === gx && a.gy === gy && sameSurfaceSide(a.side, side) && sameSurfaceFace(a.face, face);
+}
+
+function togglePause() {
+  if (!running) return;
+  updateProjectivePortals();
+  paused = !paused;
+  updateUI();
+}
+
+function toggleTopologyHints() {
+  topologyHintsVisible = !topologyHintsVisible;
+  if (cutOverlayGroup) cutOverlayGroup.visible = topologyHintsVisible;
+  updatePi1Panel();
+  updateUI();
+}
+
+function setMsg(text, cls) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg-area' + (cls ? ' ' + cls : '');
+}
+
+function clearMsgTimer() {
+  if (msgTimer) clearTimeout(msgTimer);
+  msgTimer = null;
+}
+
+function addMsg(text, cls, duration = 1600) {
+  clearMsgTimer();
+  setMsg(text, cls);
+  if (duration > 0) {
+    msgTimer = setTimeout(() => {
+      setMsg('');
+      msgTimer = null;
+    }, duration);
+  }
+}
+
+/* ===========================
+   GAME LOGIC
+   =========================== */
+function pickFoodType() {
+  const total = Object.values(FOOD_DEF).reduce((s, t) => s + t.weight, 0);
+  let r = Math.random() * total;
+  for (const [key, val] of Object.entries(FOOD_DEF)) {
+    r -= val.weight;
+    if (r <= 0) return key;
+  }
+  return 'grow';
+}
+
+function sameSurfaceSide(a, b) {
+  return (a ?? 1) === (b ?? 1);
+}
+
+function sameSurfaceFace(a, b) {
+  return (a ?? null) === (b ?? null);
+}
+
+function isOccupied(gx, gy, side = 1, face = null) {
+  if (snake.some(s => sameSnakeCell(s, gx, gy, side, face))) return true;
+  if (foods.some(f => f.gx === gx && f.gy === gy && sameSurfaceSide(f.side, side) && sameSurfaceFace(f.face, face))) return true;
+  return false;
+}
+
+function trySpawnPortal(preferred = null) {
+  if (MAP_TYPE !== 'projective' || portals.length >= PROJECTIVE_PORTALS.maxCount) return;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const gx = attempt === 0 && preferred ? preferred.gx : Math.floor(Math.random() * GRID_SIZE);
+    const gy = attempt === 0 && preferred ? preferred.gy : Math.floor(Math.random() * GRID_SIZE);
+    if ([...snake, ...foods, ...portals].some(p => p.gx === gx && p.gy === gy)) continue;
+    portals.push({ id: nextPortalId++, gx, gy, age: 0, heldActive: false });
+    return;
+  }
+}
+
+function refreshProjectivePortals() {
+  for (const portal of portals) {
+    // Keep the connection until the segment that entered it has left the tail.
+    portal.heldActive = snake.some(s => s.portalId === portal.id);
+  }
+  portals = portals.filter(p => p.age < PROJECTIVE_PORTALS.lifetime || p.heldActive);
+}
+
+function updateProjectivePortals(now = performance.now()) {
+  let elapsed = Math.max(0, (now - portalLastUpdate) / 1000);
+  portalLastUpdate = now;
+  if (MAP_TYPE !== 'projective' || !running || paused) return;
+  refreshProjectivePortals();
+  // Use active seconds, independently of the snake's tick speed or frame rate.
+  while (elapsed > 1e-9) {
+    const dt = Math.min(elapsed, PROJECTIVE_PORTALS.interval - portalSpawnElapsed);
+    for (const portal of portals) portal.age += dt;
+    refreshProjectivePortals();
+    portalSpawnElapsed += dt;
+    elapsed -= dt;
+    if (portalSpawnElapsed >= PROJECTIVE_PORTALS.interval - 1e-9) {
+      portalSpawnElapsed = 0;
+      if (portals.length < PROJECTIVE_PORTALS.maxCount && Math.random() < PROJECTIVE_PORTALS.chance) {
+        trySpawnPortal();
+      }
+    }
+  }
+}
+
+function nextSnakeStep(head, dir) {
+  const next = normalizeGridPosition(head.gx + dir.dx, head.gy + dir.dy, dir, head.side, head.face);
+  if (MAP_TYPE !== 'projective' || next.blocked) return next;
+  const portal = portals.find(p => p.gx === next.gx && p.gy === next.gy);
+  // Contact on the entry side happens before reaching the portal.
+  if (!portal || snake.some(s => sameSnakeCell(s, next.gx, next.gy, next.side, next.face))) return next;
+  next.side *= -1;
+  next.mirror *= -1;
+  next.portal = portal;
+  // Switching sides projects to a stationary point, so adds no pi1 generator.
+  return next;
+}
+
+function trySpawnFood() {
+  if (foods.length >= MAX_FOODS) return;
+  const type = pickFoodType();
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const gridSize = MAP_TYPE === 'genus2' ? GENUS2_PATCH_CELLS : GRID_SIZE;
+    const gx = Math.floor(Math.random() * gridSize);
+    const gy = Math.floor(Math.random() * gridSize);
+    const side = ['projective', 'mobius', 'klein'].includes(MAP_TYPE) && Math.random() < 0.5 ? -1 : 1;
+    const face = MAP_TYPE === 'sphere'
+      ? CUBE_FACE_KEYS[Math.floor(Math.random() * CUBE_FACE_KEYS.length)]
+      : (MAP_TYPE === 'genus2' ? randomGenus2FaceKey() : null);
+    if (!isOccupied(gx, gy, side, face) && !portals.some(p => p.gx === gx && p.gy === gy)) {
+      foods.push({ gx, gy, side, face, type, age: 0 });
+      return;
+    }
+  }
+}
+
+function applyEffect(type) {
+  switch (type) {
+    case 'grow':
+      score++;
+      if (score > best) {
+        best = score;
+        localStorage.setItem(`snake3dBest_${MAP_TYPE}`, best);
+      }
+      addMsg(tr('grew'), 'good');
+      break;
+    case 'slow':
+      speed = Math.min(speed + 30, 250);
+      restartLoop();
+      addMsg(tr('slowed'), 'good');
+      break;
+    case 'shrink':
+      if (snake.length > 2) { snake.pop(); snake.pop(); }
+      else if (snake.length > 1) { snake.pop(); }
+      addMsg(tr('shortened'), 'warn');
+      break;
+    case 'speedUp':
+      speed = Math.max(speed - 30, 40);
+      restartLoop();
+      addMsg(tr('spedUp'), 'warn');
+      break;
+  }
+}
+
+function die(reason = tr('gameOver')) {
+  running = false;
+  clearMsgTimer();
+  setMsg(reason || tr('gameOver'), 'dead');
+}
+
+function winByLoop(info) {
+  running = false;
+  const text = info.winText || tr('winNontrivial', { label: info.label });
+  clearMsgTimer();
+  setMsg(text, 'good');
+}
+
+function gameTick() {
+  if (!running || paused) return;
+
+  updateProjectivePortals();
+  tickStartTime = performance.now();
+  tickInterval = speed;
+
+  // Age foods
+  foods = foods.filter(f => { f.age++; return f.age < FOOD_LIFETIME; });
+  for (let i = foods.length; i < MIN_FOODS; i++) trySpawnFood();
+
+  // Spawn timer
+  spawnTimer--;
+  if (spawnTimer <= 0) {
+    spawnTimer = SPAWN_INTERVAL;
+    trySpawnFood();
+  }
+
+  direction = { ...nextDir };
+
+  const head = snake[0];
+  const moveDir = { ...direction };
+  const next = nextSnakeStep(head, direction);
+  if (next.blocked) {
+    die(tr('hitBoundary'));
+    return;
+  }
+  const newGx = next.gx;
+  const newGy = next.gy;
+  const newSide = next.side ?? 1;
+  const newFace = next.face ?? null;
+  direction = next.dir;
+  nextDir = { ...direction };
+  chartMirror *= next.mirror ?? 1;
+  const newHead = {
+    gx: newGx,
+    gy: newGy,
+    side: newSide,
+    face: newFace,
+    topo: advanceTopologyState(head.topo, head, moveDir),
+  };
+  if (next.portal) {
+    newHead.portalId = next.portal.id;
+    addMsg(tr('teleported'), 'good');
+  }
+  if (LOOP_WIN_MAPS.has(MAP_TYPE)) {
+    pi1LastStep = describeTopologyMove(head, moveDir);
+  }
+
+  const hitSelfIdx = snake.findIndex(s => sameSnakeCell(s, newGx, newGy, newSide, newFace));
+  if (hitSelfIdx !== -1) {
+    const closure = selfClosureInfo(newHead.topo, hitSelfIdx);
+    snake = [newHead, ...snake.slice(0, hitSelfIdx)];
+    refreshProjectivePortals();
+    if (closure?.nontrivial) {
+      winByLoop(closure);
+      updateUI();
+      return;
+    }
+
+    if (closure) {
+      addMsg(closure.failLabel || tr('failTrivial'), 'warn');
+    } else {
+      addMsg(tr('bodyCut', { n: snake.length }), 'warn');
+    }
+    updateUI();
+    return;
+  }
+
+  snake.unshift(newHead);
+
+  // Food collision
+  const eatenIdx = foods.findIndex(f => f.gx === newGx && f.gy === newGy && sameSurfaceSide(f.side, newSide) && sameSurfaceFace(f.face, newFace));
+  if (eatenIdx !== -1) {
+    const eaten = foods[eatenIdx];
+    foods.splice(eatenIdx, 1);
+    applyEffect(eaten.type);
+    trySpawnFood();
+  } else {
+    snake.pop();
+  }
+
+  refreshProjectivePortals();
+  updateUI();
+}
+
+function restartLoop() {
+  clearInterval(loop);
+  loop = setInterval(gameTick, speed);
+}
+
+/* ===========================
+   CAMERA
+   =========================== */
+function resetCamera() {
+  const position = (MAP_TYPE === 'genus2' ? GENUS2_CAMERA_POSITION : DEFAULT_CAMERA_POSITION).clone();
+  if (MOBILE_VIEW_QUERY.matches) position.multiplyScalar(MOBILE_CAMERA_DISTANCE_SCALE);
+  camera.position.copy(position);
+  camera.lookAt(0, 0, 0);
+  surfaceGroup.rotation.set(0, 0, 0);
+}
+
+function directionAngle(dir) {
+  if (dir.dx === 1) return 0;
+  if (dir.dy === 1) return 1;
+  if (dir.dx === -1) return 2;
+  return 3;
+}
+
+function rotateGridVector(vec, turns) {
+  const n = ((turns % 4) + 4) % 4;
+  if (n === 1) return { dx: -vec.dy, dy: vec.dx };
+  if (n === 2) return { dx: -vec.dx, dy: -vec.dy };
+  if (n === 3) return { dx: vec.dy, dy: -vec.dx };
+  return { dx: vec.dx, dy: vec.dy };
+}
+
+function reflectAcrossDirectionAxis(vec, axisDir) {
+  if (axisDir.dx !== 0) return { dx: vec.dx, dy: -vec.dy };
+  return { dx: -vec.dx, dy: vec.dy };
+}
+
+function surfaceToChartVector(vec) {
+  const baseDir = nextDir || direction;
+  const oriented = chartMirror === -1 ? reflectAcrossDirectionAxis(vec, baseDir) : vec;
+  const turns = directionAngle(chartDisplayDir) - directionAngle(baseDir);
+  return rotateGridVector(oriented, turns);
+}
+
+function chartToSurfaceDirection(dir) {
+  const baseDir = nextDir || direction;
+  const turns = directionAngle(baseDir) - directionAngle(chartDisplayDir);
+  const rotated = rotateGridVector(dir, turns);
+  return chartMirror === -1 ? reflectAcrossDirectionAxis(rotated, baseDir) : rotated;
+}
+
+function queueChartDirection(displayDir) {
+  const surfaceDir = chartToSurfaceDirection(displayDir);
+  const activeDir = nextDir || direction;
+  if (surfaceDir.dx === -activeDir.dx && surfaceDir.dy === -activeDir.dy) return;
+  nextDir = surfaceDir;
+  chartDisplayDir = { ...displayDir };
+}
+
+/* ===========================
+   INPUT
+   =========================== */
+document.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+
+  if (key === ' ' || key === 'spacebar' || key === 'p') {
+    e.preventDefault();
+    togglePause();
+    return;
+  }
+
+  if (key === 'r') {
+    resetCamera();
+    return;
+  }
+
+  if (!running || paused) return;
+
+  switch (key) {
+    case 'arrowup':    case 'w': queueChartDirection({ dx:  0, dy: -1 }); break;
+    case 'arrowdown':  case 's': queueChartDirection({ dx:  0, dy:  1 }); break;
+    case 'arrowleft':  case 'a': queueChartDirection({ dx: -1, dy:  0 }); break;
+    case 'arrowright': case 'd': queueChartDirection({ dx:  1, dy:  0 }); break;
+  }
+});
+
+document.getElementById('restart').addEventListener('click', () => {
+  clearInterval(loop);
+  init();
+  loop = setInterval(gameTick, speed);
+});
+
+document.getElementById('pauseBtn').addEventListener('click', togglePause);
+document.getElementById('topologyHintsBtn').addEventListener('click', toggleTopologyHints);
+document.getElementById('resetCam').addEventListener('click', resetCamera);
+
+/* ===========================
+   INIT
+   =========================== */
+function init() {
+  applyStaticText();
+  fieldScale = 1.0;
+  ensureSurfaceGeometry();
+  score = 0;
+  speed = INITIAL_SPEED_MS;
+  running = true;
+  paused = false;
+  foods = [];
+  portals = [];
+  nextPortalId = 1;
+  portalSpawnElapsed = 0;
+  portalLastUpdate = performance.now();
+  spawnTimer = SPAWN_INTERVAL;
+  clearMsgTimer();
+  best = parseInt(localStorage.getItem(`snake3dBest_${MAP_TYPE}`) || '0');
+
+  resetSnake();
+
+  for (let i = 0; i < INITIAL_FOODS; i++) trySpawnFood();
+  const ahead = normalizeGridPosition(snake[0].gx + 3, snake[0].gy, null, snake[0].side, snake[0].face);
+  for (let i = 0; i < PROJECTIVE_PORTALS.initialCount; i++) trySpawnPortal(ahead);
+
+  setMsg('');
+  updateUI();
+  resetCamera();
+  tickStartTime = performance.now();
+}
+
+/* ===========================
+   LOCAL MAP (2D CHART)
+   =========================== */
+const mapCanvas = document.getElementById('mapCanvas');
+const touchControlZone = document.getElementById('touch-control-zone');
+const MAP_CTX = mapCanvas.getContext('2d');
+const MAP_CELLS = 9;
+const MAP_PX = mapCanvas.width / MAP_CELLS;
+const MAP_HALF = Math.floor(MAP_CELLS / 2);
+const MAP_SWIPE_THRESHOLD = 24;
+let mapTouchStart = null;
+
+function claimMapPointerEvent(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function handleMapSwipe(dx, dy) {
+  if (!running || paused) return false;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < MAP_SWIPE_THRESHOLD) return false;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    queueChartDirection({ dx: dx < 0 ? -1 : 1, dy: 0 });
+  } else {
+    queueChartDirection({ dx: 0, dy: dy < 0 ? -1 : 1 });
+  }
+  return true;
+}
+
+function startChartControlPointer(e) {
+  claimMapPointerEvent(e);
+  mapTouchStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  e.currentTarget.setPointerCapture(e.pointerId);
+}
+
+function moveChartControlPointer(e) {
+  if (!mapTouchStart || mapTouchStart.pointerId !== e.pointerId) return;
+  claimMapPointerEvent(e);
+  const dx = e.clientX - mapTouchStart.x;
+  const dy = e.clientY - mapTouchStart.y;
+  if (handleMapSwipe(dx, dy)) {
+    mapTouchStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  }
+}
+
+function endChartControlPointer(e) {
+  if (!mapTouchStart || mapTouchStart.pointerId !== e.pointerId) return;
+  claimMapPointerEvent(e);
+  handleMapSwipe(e.clientX - mapTouchStart.x, e.clientY - mapTouchStart.y);
+  mapTouchStart = null;
+  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+}
+
+function bindChartControlSurface(el) {
+  el.addEventListener('pointerdown', startChartControlPointer, { passive: false });
+  el.addEventListener('pointermove', moveChartControlPointer, { passive: false });
+  el.addEventListener('pointerup', endChartControlPointer, { passive: false });
+  el.addEventListener('pointercancel', endChartControlPointer, { passive: false });
+}
+
+bindChartControlSurface(mapCanvas);
+bindChartControlSurface(touchControlZone);
+
+function drawMiniMap() {
+  if (snake.length === 0) return;
+  const ctx = MAP_CTX;
+  const head = snake[0];
+  const dir = chartDisplayDir;
+
+  // Background
+  ctx.fillStyle = '#223447';
+  ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(168,228,210,0.32)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= MAP_CELLS; i++) {
+    const p = i * MAP_PX;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, mapCanvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(mapCanvas.width, p); ctx.stroke();
+  }
+
+  // Map world coordinates to chart pixel center.
+  function worldToChart(gx, gy, side = 1, face = null) {
+    let best = null;
+    for (let ry = -MAP_HALF; ry <= MAP_HALF; ry++) {
+      for (let rx = -MAP_HALF; rx <= MAP_HALF; rx++) {
+        const p = normalizeGridPosition(head.gx + rx, head.gy + ry, null, head.side, head.face);
+        if (
+          p.blocked ||
+          p.gx !== gx ||
+          p.gy !== gy ||
+          !sameSurfaceSide(p.side, side) ||
+          !sameSurfaceFace(p.face, face)
+        ) continue;
+        const dist = Math.abs(rx) + Math.abs(ry);
+        if (!best || dist < best.dist) best = { rx, ry, dist };
+      }
+    }
+    if (!best) return null;
+    const screenOffset = surfaceToChartVector({ dx: best.rx, dy: best.ry });
+    return {
+      cx: (screenOffset.dx + MAP_HALF) * MAP_PX + MAP_PX / 2,
+      cy: (screenOffset.dy + MAP_HALF) * MAP_PX + MAP_PX / 2,
+    };
+  }
+
+  // Show hidden segments as outlines; keep solid marks above them.
+  if (SHOW_REVERSE_SNAKE) {
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      if (worldToChart(s.gx, s.gy, s.side, s.face)) continue;
+      const m = worldToChart(s.gx, s.gy, -(s.side ?? 1), s.face);
+      if (m) drawReverseSnakeMark(ctx, m.cx, m.cy, MAP_PX, i === 0);
+    }
+  }
+
+  // Food
+  for (const f of foods) {
+    const m = worldToChart(f.gx, f.gy, f.side, f.face);
+    if (!m) continue;
+    const def = FOOD_DEF[f.type];
+    const pad = MAP_PX * 0.16;
+    ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
+    ctx.fillRect(m.cx - MAP_PX / 2 + pad, m.cy - MAP_PX / 2 + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(m.cx - MAP_PX / 2 + pad, m.cy - MAP_PX / 2 + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+  }
+
+  // Snake (tail first, head on top)
+  for (let i = snake.length - 1; i >= 0; i--) {
+    const s = snake[i];
+    const m = worldToChart(s.gx, s.gy, s.side, s.face);
+    if (!m) continue;
+    const pad = 1;
+    const x = m.cx - MAP_PX / 2;
+    const y = m.cy - MAP_PX / 2;
+    if (i === 0) {
+      ctx.fillStyle = '#ffdd57';
+      ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+      // Eyes
+      const er = MAP_PX * 0.10;
+      ctx.fillStyle = '#061018';
+      let ex1, ey1, ex2, ey2;
+      if (dir.dx === 1)       { ex1 = m.cx + MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
+      else if (dir.dx === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx - MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
+      else if (dir.dy === -1) { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy - MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy - MAP_PX*0.18; }
+      else                    { ex1 = m.cx - MAP_PX*0.18; ey1 = m.cy + MAP_PX*0.18; ex2 = m.cx + MAP_PX*0.18; ey2 = m.cy + MAP_PX*0.18; }
+      ctx.beginPath(); ctx.arc(ex1, ey1, er, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex2, ey2, er, 0, Math.PI * 2); ctx.fill();
+    } else {
+      const alpha = 0.55 + 0.45 * (1 - i / Math.max(snake.length, 1));
+      ctx.fillStyle = `rgba(255,140,66,${alpha.toFixed(2)})`;
+      ctx.fillRect(x + pad, y + pad, MAP_PX - pad * 2, MAP_PX - pad * 2);
+    }
+  }
+
+  for (const portal of portals) {
+    const m = worldToChart(portal.gx, portal.gy, 1) || worldToChart(portal.gx, portal.gy, -1);
+    if (m) drawPortalMark(ctx, portal, m.cx, m.cy, MAP_PX);
+  }
+
+  // Center cell highlight
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 2;
+  const chx = MAP_HALF * MAP_PX, chy = MAP_HALF * MAP_PX;
+  ctx.strokeRect(chx + 0.5, chy + 0.5, MAP_PX - 1, MAP_PX - 1);
+
+  // Direction arrow on head
+  const acx = MAP_HALF * MAP_PX + MAP_PX / 2;
+  const acy = MAP_HALF * MAP_PX + MAP_PX / 2;
+  ctx.fillStyle = '#061018';
+  ctx.beginPath();
+  const alen = MAP_PX * 0.3;
+  const ax = acx + dir.dx * alen;
+  const ay = acy + dir.dy * alen;
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(ax - dir.dy * alen * 0.35, ay + dir.dx * alen * 0.35);
+  ctx.lineTo(ax + dir.dy * alen * 0.35, ay - dir.dx * alen * 0.35);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* ===========================
+   RENDER LOOP
+   =========================== */
+function render() {
+  requestAnimationFrame(render);
+
+  updateProjectivePortals();
+  redrawTexture();
+  drawMiniMap();
+  updatePi1Panel();
+  renderer.render(scene, camera);
+}
+
+init();
+loop = setInterval(gameTick, speed);
+render();
+</script>
+</body>
+</html>

@@ -9,11 +9,158 @@ Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Snake on Surfaces — Choose a Surface</title>
-<link rel="stylesheet" href="style.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #111118;
+    font-family: 'Courier New', monospace;
+    color: #eee;
+  }
+  .container { text-align: center; }
+  .lang-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    padding: 7px 14px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    background: #4ecca3;
+    color: #10131c;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  .lang-toggle:hover { background: #3db88f; }
+  .version-toggle { left: 16px; right: auto; text-decoration: none; }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 6px;
+    color: #4ecca3;
+    letter-spacing: 4px;
+  }
+  .subtitle {
+    color: #888;
+    font-size: 0.85rem;
+    margin-bottom: 32px;
+  }
+  .maps {
+    display: grid;
+    grid-template-columns: repeat(3, 260px);
+    gap: 24px;
+    justify-content: center;
+  }
+  .map-card {
+    width: 260px;
+    padding: 14px 16px 20px;
+    background: rgba(255,255,255,0.04);
+    border: 2px solid rgba(78,204,163,0.3);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .map-card:hover {
+    border-color: #4ecca3;
+    background: rgba(78,204,163,0.08);
+    transform: translateY(-2px);
+  }
+  .surface-preview {
+    width: 100%;
+    height: 150px;
+    margin-bottom: 14px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #07090f;
+    border: 1px solid rgba(78,204,163,0.22);
+  }
+  .surface-preview canvas,
+  .surface-preview img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    pointer-events: none;
+  }
+  .map-name {
+    font-size: 1.2rem;
+    color: #4ecca3;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .speed-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .speed-control label {
+    font-size: 0.85rem;
+    color: #ccc;
+    letter-spacing: 1px;
+  }
+  .speed-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 180px;
+    height: 6px;
+    background: rgba(78,204,163,0.3);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+  .speed-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4ecca3;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .speed-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #4ecca3;
+    border-radius: 50%;
+    border: 0;
+    cursor: pointer;
+  }
+  .speed-value {
+    display: inline-block;
+    width: 36px;
+    text-align: center;
+    font-weight: bold;
+    color: #4ecca3;
+  }
+  .repo-link {
+    margin-top: 20px;
+    font-size: 0.72rem;
+  }
+  .repo-link a {
+    color: #4ecca3;
+    text-decoration: none;
+  }
+  .repo-link a:hover { text-decoration: underline; }
+  @media (max-width: 880px) {
+    .maps { grid-template-columns: repeat(2, 260px); }
+  }
+  @media (max-width: 590px) {
+    body { align-items: flex-start; padding: 72px 0 28px; }
+    .maps { grid-template-columns: 260px; }
+  }
+</style>
 </head>
-<body data-page="selection">
+<body>
 <button class="lang-toggle" id="langToggle">中文</button>
-<a class="lang-toggle version-toggle" id="versionToggle" href="classic/index.html" data-i18n="classicVersion">Classic</a>
+<a class="lang-toggle version-toggle" id="versionToggle" href="../index.html" data-i18n="modernVersion">New version</a>
 <div class="container">
   <h1 data-i18n="appName">Snake on Surfaces</h1>
   <div class="subtitle" data-i18n="subtitle">Choose a surface to start</div>
@@ -58,7 +205,7 @@ const I18N = {
     title: 'Snake on Surfaces — Choose a Surface',
     appName: 'Snake on Surfaces',
     toggle: '中文',
-    classicVersion: 'Classic',
+    modernVersion: 'New version',
     subtitle: 'Choose a surface to start',
     sphere: 'Sphere',
     torus: 'Torus',
@@ -73,7 +220,7 @@ const I18N = {
     title: '蛇蛇教你学拓扑 — 选择地图',
     appName: '蛇蛇教你学拓扑',
     toggle: 'English',
-    classicVersion: '原版',
+    modernVersion: '新版',
     subtitle: '选择地图开始游戏',
     sphere: '球 面',
     torus: '环 面',
@@ -158,18 +305,17 @@ applyLanguage = function() {
 
 applyLanguage();
 </script>
-<script src="surface-models.js"></script>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js';
 
 const previews = [];
 const previewPalette = {
-  sphere: 0x89c7bc,
-  torus: 0x77bca9,
-  genus2: 0xa79dcd,
-  mobius: 0xe4bb85,
-  projective: 0xbda5ca,
-  klein: 0x86b9cd,
+  sphere: 0x6fc7ff,
+  torus: 0x4ecca3,
+  genus2: 0x8fd3ff,
+  mobius: 0xffb35c,
+  projective: 0xb98cff,
+  klein: 0x66d9e8,
 };
 
 function createParametricGeometry(uSegments, vSegments, pointFn) {
@@ -221,8 +367,24 @@ function mobiusPoint(u01, v01) {
   );
 }
 
+function projectiveSquareToDisk(a, b) {
+  return {
+    x: a * Math.sqrt(Math.max(0, 1 - (b * b) / 2)),
+    y: b * Math.sqrt(Math.max(0, 1 - (a * a) / 2)),
+  };
+}
+
 function projectivePoint(u01, v01) {
-  return crossCapSurfacePoint(THREE, u01, v01, 0.86);
+  const a = u01 * 2 - 1;
+  const b = v01 * 2 - 1;
+  const disk = projectiveSquareToDisk(a, b);
+  const radius = Math.min(1, Math.hypot(disk.x, disk.y));
+  const theta = Math.atan2(disk.y, disk.x);
+  const v = radius * Math.PI / 2;
+  const x = Math.cos(theta) * Math.sin(2 * v);
+  const y = Math.sin(theta) * Math.sin(2 * v);
+  const z = Math.cos(v) ** 2 - Math.cos(theta) ** 2 * Math.sin(v) ** 2;
+  return new THREE.Vector3(x * 0.9, z * 0.68, y * 0.9);
 }
 
 function kleinPoint(u01, v01) {
@@ -246,8 +408,8 @@ function kleinPoint(u01, v01) {
 function makeMaterial(mapType) {
   return new THREE.MeshStandardMaterial({
     color: previewPalette[mapType],
-    roughness: 0.65,
-    metalness: 0,
+    roughness: 0.54,
+    metalness: 0.08,
     side: ['mobius', 'projective', 'klein'].includes(mapType) ? THREE.DoubleSide : THREE.FrontSide,
   });
 }
@@ -342,14 +504,12 @@ function makePreview(card) {
   }
 
   const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x07090f);
   const camera = new THREE.PerspectiveCamera(38, holder.clientWidth / holder.clientHeight, 0.1, 20);
   camera.position.set(0, 0.95, 3.4);
   camera.lookAt(0, 0, 0);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.02;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
   renderer.setSize(holder.clientWidth, holder.clientHeight, false);
   holder.appendChild(renderer.domElement);
@@ -363,15 +523,12 @@ function makePreview(card) {
     klein: 1.05,
   }[card.dataset.map] || 0;
   scene.add(object);
-  scene.add(new THREE.HemisphereLight(0xfff9df, 0xa2b9af, 1.65));
-  const key = new THREE.DirectionalLight(0xffefd6, 2.5);
-  key.position.set(-2.5, 3.2, 3.4);
+  scene.add(new THREE.AmbientLight(0xffffff, 2.1));
+  const key = new THREE.DirectionalLight(0xffffff, 2.4);
+  key.position.set(2.5, 3.2, 3.4);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0xd8edf4, 1.7);
-  rim.position.set(3, 1, -3);
-  scene.add(rim);
 
-  previews.push({ holder, renderer, scene, camera, object, speed: 0.18 + previews.length * 0.02 });
+  previews.push({ holder, renderer, scene, camera, object, speed: 0.006 + previews.length * 0.0007 });
 }
 
 document.querySelectorAll('.map-card').forEach(makePreview);
@@ -388,14 +545,10 @@ function resizePreviews() {
 
 window.addEventListener('resize', resizePreviews);
 
-const reducePreviewMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let lastPreviewTime = null;
-function animatePreviews(time = 0) {
+function animatePreviews() {
   requestAnimationFrame(animatePreviews);
-  const delta = lastPreviewTime === null ? 0 : Math.min((time - lastPreviewTime) / 1000, 0.05);
-  lastPreviewTime = time;
   for (const preview of previews) {
-    if (!reducePreviewMotion) preview.object.rotation.y += preview.speed * delta;
+    preview.object.rotation.y += preview.speed;
     preview.renderer.render(preview.scene, preview.camera);
   }
 }

@@ -18,7 +18,7 @@ The goal is usually to form an Ouroboros: the snake closes into a loop. Differen
 
 ## Play
 
-Open `index.html` in a browser and choose a surface.
+Open `index.html` in a browser and choose a surface. Use the Classic / New version button at the top left to switch between the original grid-based game and this continuous-movement version. Both versions are included; the original is in `classic/`.
 
 ## Controls
 
@@ -98,7 +98,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 
 ## 运行
 
-用浏览器打开 `index.html`，然后选择曲面即可。
+用浏览器打开 `index.html`，然后选择曲面即可。首页左上角的“原版 / 新版”按钮可切换格子移动的原版与连续移动的新版。本分支同时包含两个版本，原版位于 `classic/`。
 
 ## 操作
 
