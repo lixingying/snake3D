@@ -71,7 +71,7 @@ function run(THREE) {
   assert.equal(app.game.state().companionSnake, undefined, 'Only one snake exists');
   assert.equal(app.companionActors, undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(app.game.state().portalConfig)), {
-    interval: 5, chance: .4, lifetime: 30, maxCount: 2, radius: .08, initialCount: 1,
+    interval: 5, chance: .4, lifetime: 60, maxCount: 2, radius: .08, initialCount: 1,
   });
 
   for (const edge of ['L', 'R', 'U', 'D']) for (const side of [1, -1]) {

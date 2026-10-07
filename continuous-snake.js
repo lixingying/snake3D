@@ -7,7 +7,7 @@ function createContinuousSnake({ navigation: nav, classifyLoop, randomPoint, onE
   radius = 0.052, initialLength = 1.4, initialSpeed = 0.9, turnRate = 4,
   portalSettings = null, random = Math.random, foodWeights = { grow: 52, slow: 12, shrink: 24, speedUp: 12 } }) {
   const STEP = 1 / 120, SPACING = 0.065, FOOD_LIFETIME = 33;
-  const portalConfig = portalSettings && { interval: 5, chance: 0.4, lifetime: 30, maxCount: 2,
+  const portalConfig = portalSettings && { interval: 5, chance: 0.4, lifetime: 60, maxCount: 2,
     radius: 0.08, initialCount: 1, ...portalSettings };
   let trail = [], foods = [], head, length = initialLength, speed = initialSpeed;
   let score = 0, running = true, paused = false, accumulator = 0, spawnClock = 0;

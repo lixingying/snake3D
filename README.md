@@ -53,7 +53,7 @@ Visual settings are in `snake3d.html`, `clay-actors.js`, `chart-view.js`, and `s
 - Genus-2 default camera: `GENUS2_CAMERA_POSITION`.
 - Mobile camera zoom: `MOBILE_CAMERA_DISTANCE_SCALE`. Smaller values zoom in more on mobile.
 - Snake length, radius, and turning speed: `initialLength`, `radius`, `turnRate`.
-- Projective-plane portals: `PROJECTIVE_PORTALS` in `snake3d.html`. Start with one; every 5 seconds of play, a 40% chance to spawn another, up to two. Each lasts 30 seconds and remains active until the tail teleports.
+- Projective-plane portals: `PROJECTIVE_PORTALS` in `snake3d.html`. Start with one; every 5 seconds of play, a 40% chance to spawn another, up to two. Each lasts 60 seconds and remains active until the tail teleports.
 - Food weights and colors: `FOOD_DEF`.
 
 The index page previews can either use the built-in rotating 3D previews or custom images. To use a custom image, set `data-image` on a `.map-card` in `index.html`.
@@ -133,7 +133,7 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 双孔曲面默认相机：`GENUS2_CAMERA_POSITION`。
 - 手机端相机距离：`MOBILE_CAMERA_DISTANCE_SCALE`。数值越小，手机端越放大。
 - 蛇的长度、粗细和转向速度：`initialLength`、`radius`、`turnRate`。
-- 射影平面传送点：`snake3d.html` 中的 `PROJECTIVE_PORTALS`。开局一个，游玩时每 5 秒有 40% 概率新增，同时最多两个；持续 30 秒，蛇身尚在传送时等蛇尾通过再消失。
+- 射影平面传送点：`snake3d.html` 中的 `PROJECTIVE_PORTALS`。开局一个，游玩时每 5 秒有 40% 概率新增，同时最多两个；持续 60 秒，蛇身尚在传送时等蛇尾通过再消失。
 - 食物权重和颜色：`FOOD_DEF`。
 
 首页预览可以使用内置的旋转 3D 预览，也可以换成自己的图片。要换图，在 `index.html` 的 `.map-card` 上填写 `data-image`。
