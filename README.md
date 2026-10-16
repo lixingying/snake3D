@@ -62,6 +62,8 @@ The index page previews can either use the built-in rotating 3D previews or cust
 
 GitHub: <https://github.com/lixingying/snake3D>
 
+You can play directly at <https://www.xingyingli.com/snake3D/index.html>.
+
 ## Rights, License, and Attribution
 
 Copyright 2026 Xingying Li.
@@ -137,6 +139,12 @@ Snake on Surfaces 是一个把经典贪吃蛇玩法放到拓扑曲面上的浏�
 - 射影平面传送口：`PROJECTIVE_PORTALS`。开局一个；每游玩 5 秒，有 40% 概率生成一个，同时最多两个。持续 60 秒；若蛇身仍在通过，则保留到蛇尾通过。暂停时停止计时。
 
 首页预览可以使用内置的旋转 3D 预览，也可以换成自己的图片。要换图，在 `index.html` 的 `.map-card` 上填写 `data-image`。
+
+## 代码仓库
+
+GitHub: <https://github.com/lixingying/snake3D>
+
+你可以在 <https://www.xingyingli.com/snake3D/index.html> 直接游玩。
 
 ## 权利、许可证与署名
 
